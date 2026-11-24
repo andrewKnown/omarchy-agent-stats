@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.andrewknown.agent-stats",
+  "name": "Omarchy Agent Stats",
+  "version": "1.0.0",
+  "author": "andrewKnown",
+  "license": "MIT",
+  "description": "Per-agent rate-limit meters and today's token total in the bar, built on Omarchy's own Agents usage data. Click an agent to open it in a terminal.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Widget.qml"
+  },
+  "barWidget": {
+    "displayName": "Agent Stats",
+    "description": "Two thin meters per subscription (session over weekly) and today's total tokens. Click an agent to launch it, right click for the Agents panel, middle click to refresh.",
+    "category": "AI",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 60,
+      "warnAt": 80,
+      "badgeStyle": "Letters",
+      "activityPulse": false
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Re-read interval (seconds, local files only)",
+        "min": 15,
+        "max": 900,
+        "step": 15,
+        "defaultValue": 60
+      },
+      {
+        "key": "warnAt",
+        "type": "integer",
+        "label": "Turn a meter urgent at (%)",
+        "min": 10,
+        "max": 100,
+        "step": 5,
+        "defaultValue": 80
+      },
+      {
+        "key": "badgeStyle",
+        "type": "enum",
+        "label": "Agent badge",
+        "options": [
+          "Letters",
+          "Logos"
+        ],
+        "defaultValue": "Letters",
+        "description": "Letters (CL, CX, GK) or each agent's logo from Omarchy's Agents plugin."
+      },
+      {
+        "key": "activityPulse",
+        "type": "boolean",
+        "label": "Pulse while an agent is working",
+        "defaultValue": false,
+        "description": "Gently pulses an agent's badge while its CLI is busy. Checks local process CPU every 3 seconds."
+      }
+    ]
+  }
+}
