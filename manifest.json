@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.andrewknown.agent-stats",
   "name": "Omarchy Agent Stats",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "andrewKnown",
   "license": "MIT",
   "description": "Per-agent rate-limit meters and today's token total in the bar, built on Omarchy's own Agents usage data. Click an agent to open it in a terminal.",
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Agent Stats",
-    "description": "Two thin meters per subscription (session over weekly) and today's total tokens. Click an agent to launch it, right click for the Agents panel, middle click to refresh.",
+    "description": "Two thin meters per subscription (session over weekly) and today's total tokens. Click an agent to launch it, right click for a menu (badge style, pulse, Agents panel), middle click to refresh.",
     "category": "AI",
     "allowMultiple": false,
     "defaultSection": "right",

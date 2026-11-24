@@ -1,16 +1,32 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.Commons
 import qs.Ui
 
 // One small meter pair per agent subscription: a letter, then the short
 // (5-hour) window on top and the longest window below. It only reads the
 // records omarchy-agent-usage-update writes (via read.py). Click an agent to
-// open it in a terminal (launch.sh), right click for the Agents panel, middle
-// click to refresh.
-BarWidget {
+// open it in a terminal (launch.sh), right click for this widget's menu
+// (badge style, pulse, Agents panel, refresh), middle click to refresh.
+//
+// The root is Omarchy's popup base (Panel) rather than BarWidget so the menu
+// can be a standard bar popup; it carries the same bar/settings API.
+Panel {
   id: root
   moduleName: "io.github.andrewknown.agent-stats"
+  ipcTarget: "io.github.andrewknown.agent-stats"
+
+  readonly property bool vertical: bar ? bar.vertical : false
+  readonly property int barSize: bar && bar.barSize ? bar.barSize : 26
+
+  // Settings are saved through Omarchy's own CLI, which writes this widget's
+  // entry in shell.json; the shell hot-reloads it back into `settings`.
+  function saveSetting(key, value, json) {
+    var cmd = ["omarchy-bar", "set", root.moduleName, key, String(value)]
+    if (json) cmd.push("--json")
+    Quickshell.execDetached(cmd)
+  }
 
   property var agents: []
   property var busyIds: []
@@ -136,7 +152,7 @@ BarWidget {
       lines.push(l.label + ": " + l.percent.toFixed(0) + "%" + (reset ? "  · resets in " + reset : ""))
     }
     lines.push("")
-    lines.push((launchers[a.id] ? "Click: open " + a.name : "Click: Agents panel") + " · Right: panel · Middle: refresh")
+    lines.push((launchers[a.id] ? "Click: open " + a.name : "Click: Agents panel") + " · Right: menu · Middle: refresh")
     return lines.join("\n")
   }
 
@@ -152,7 +168,7 @@ BarWidget {
     for (var i = 0; i < todayByAgent.length; i++)
       lines.push("  " + todayByAgent[i].name + ": " + formatTokens(Number(todayByAgent[i].tokens)))
     lines.push("")
-    lines.push("Click: Agents panel · Middle: refresh")
+    lines.push("Click: Agents panel · Right: menu · Middle: refresh")
     return lines.join("\n")
   }
 
@@ -289,7 +305,9 @@ BarWidget {
             if (button === Qt.MiddleButton) {
               Quickshell.execDetached(["omarchy-shell", "omarchy.agents", "refresh"])
               refreshLater.restart()
-            } else if (button === Qt.RightButton || !launcher) {
+            } else if (button === Qt.RightButton) {
+              root.toggle()
+            } else if (!launcher) {
               root.openPanel()
             } else {
               Quickshell.execDetached(["bash", root.launchScript, launcher])
@@ -331,9 +349,124 @@ BarWidget {
           if (button === Qt.MiddleButton) {
             Quickshell.execDetached(["omarchy-shell", "omarchy.agents", "refresh"])
             refreshLater.restart()
+          } else if (button === Qt.RightButton) {
+            root.toggle()
           } else {
             root.openPanel()
           }
+        }
+      }
+    }
+  }
+
+  // Right-click menu, built from the same parts as Omarchy's own bar popups.
+  KeyboardPanel {
+    id: menu
+    anchorItem: root
+    owner: root
+    bar: root.bar
+    open: root.opened
+    focusTarget: menu.loadedContent
+    contentWidth: menu.fittedContentWidth(Style.space(240))
+    contentHeight: menu.fittedContentHeight(menu.loadedContentHeight)
+
+    content: PanelKeyCatcher {
+      anchors.fill: parent
+      implicitHeight: menuColumn.implicitHeight
+      onCloseRequested: root.close()
+
+      Column {
+        id: menuColumn
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        spacing: Style.space(14)
+
+        MenuChoice {
+          title: "Agent badge"
+          options: ["Letters", "Logos"]
+          current: root.useLogos ? "Logos" : "Letters"
+          onChosen: function(value) { root.saveSetting("badgeStyle", value, false) }
+        }
+
+        MenuChoice {
+          title: "Pulse while working"
+          options: ["Off", "On"]
+          current: root.activityPulse ? "On" : "Off"
+          onChosen: function(value) { root.saveSetting("activityPulse", value === "On" ? "true" : "false", true) }
+        }
+
+        Row {
+          id: actionRow
+          width: parent.width
+          spacing: Style.space(6)
+          readonly property real cellWidth: (width - spacing) / 2
+
+          Button {
+            width: actionRow.cellWidth
+            text: "Agents panel"
+            fontSize: Style.font.bodySmall
+            foreground: root.fg
+            fontFamily: root.font
+            bordered: true
+            onClicked: { root.close(); root.openPanel() }
+          }
+
+          Button {
+            width: actionRow.cellWidth
+            text: "Refresh"
+            fontSize: Style.font.bodySmall
+            foreground: root.fg
+            fontFamily: root.font
+            bordered: true
+            onClicked: {
+              Quickshell.execDetached(["omarchy-shell", "omarchy.agents", "refresh"])
+              refreshLater.restart()
+              root.refresh()
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // A titled row of mutually exclusive buttons; the current one is lit.
+  component MenuChoice: Column {
+    id: choice
+    property string title: ""
+    property var options: []
+    property string current: ""
+    signal chosen(string value)
+
+    width: parent ? parent.width : 0
+    spacing: Style.space(8)
+
+    PanelSectionHeader {
+      text: choice.title
+      foreground: root.fg
+      fontFamily: root.font
+    }
+
+    Row {
+      id: choiceRow
+      width: parent.width
+      spacing: Style.space(6)
+      readonly property real cellWidth: choice.options.length > 0
+        ? (width - spacing * (choice.options.length - 1)) / choice.options.length : 0
+
+      Repeater {
+        model: choice.options
+
+        Button {
+          required property var modelData
+          width: choiceRow.cellWidth
+          text: String(modelData)
+          fontSize: Style.font.bodySmall
+          foreground: root.fg
+          fontFamily: root.font
+          bordered: true
+          active: choice.current === modelData
+          onClicked: choice.chosen(String(modelData))
         }
       }
     }

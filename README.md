@@ -15,8 +15,17 @@ An agent whose limits couldn't be refreshed is shown faded. After the meters,
 |---|---|---|
 | Hover | Each limit's % and time to reset | Today's tokens per agent |
 | Left click | Open that agent in a terminal | Open the Agents panel |
-| Right click | Open the Agents panel | Open the Agents panel |
+| Right click | Open the menu | Open the menu |
 | Middle click | Refresh usage now | Refresh usage now |
+
+The right-click menu switches the badge between letters and logos, turns the
+activity pulse on or off, opens the Agents panel, and refreshes. Choices are
+saved to the widget's entry in `~/.config/omarchy/shell.json` through
+`omarchy bar set`. You can also toggle the menu from a keybinding or script:
+
+```bash
+omarchy-shell io.github.andrewknown.agent-stats toggle
+```
 
 ## How it works
 
