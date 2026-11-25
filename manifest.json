@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.andrewknown.agent-stats",
   "name": "Omarchy Agent Stats",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": "andrewKnown",
   "license": "MIT",
   "description": "Per-agent rate-limit meters, prepaid balances (OpenRouter) and today's token total in the bar, built on Omarchy's own Agents usage data. Click an agent to open it in a terminal.",

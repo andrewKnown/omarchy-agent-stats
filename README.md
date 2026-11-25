@@ -45,6 +45,14 @@ section showing the remaining balance, or what was spent today or this month
 dollars. Hover shows the balance, spend today, this week (live only) and
 this month, and any key limit.
 
+With live OpenRouter checks and a management key that can read analytics, the
+tooltip also shows account-wide tokens reported today, this week (starting
+Monday), and this month in UTC. Analytics also supplies today's and this
+month's spend, the daily average over completed days this month, and the
+monthly average over the last three completed calendar months. Select
+**OpenRouter API** in the widget's right-click menu to enable live checks, or
+**Local estimates** to use Omarchy's saved records.
+
 Omarchy needs a key for OpenRouter. Put it in
 `~/.config/omarchy/agents/openrouter.json` as `{"apiKey": "sk-or-..."}`. Add a
 `managementKey` from openrouter.ai/settings/management-keys as well for

@@ -211,6 +211,22 @@ Panel {
       lines.push(!p.live ? "From Omarchy's balance, counted locally"
         : p.scope === "account" ? "Live from OpenRouter, all " + (p.keyCount || 0) + " keys (UTC days)"
         : "Live from OpenRouter, this key only (UTC days)")
+      var tokens = p.tokens
+      if (tokens && [tokens.today, tokens.week, tokens.month].every(
+          n => Number.isSafeInteger(n) && n >= 0)) {
+        var locale = Qt.locale()
+        lines.push("Account tokens (UTC): " + tokens.today.toLocaleString(locale, "f", 0) + " today · "
+          + tokens.week.toLocaleString(locale, "f", 0) + " this week · "
+          + tokens.month.toLocaleString(locale, "f", 0) + " this month")
+      }
+      var stats = p.spendStats
+      if (stats) {
+        lines.push("Account spend (UTC): " + money(stats.today, p.currency) + " today · "
+          + money(stats.month, p.currency) + " this month")
+        if (typeof stats.dailyAverage === "number")
+          lines.push("Average per day (completed days this month): " + money(stats.dailyAverage, p.currency))
+        lines.push("Average per month (last 3 completed): " + money(stats.monthlyAverage, p.currency))
+      }
     }
     if (a.liveError) lines.push("Live check: " + a.liveError)
     for (var j = 0; j < a.limits.length; j++) {
@@ -535,10 +551,12 @@ Panel {
 
         MenuChoice {
           visible: root.hasPrepaid || root.openrouterLive
-          title: "OpenRouter numbers"
-          options: ["Omarchy", "Live"]
-          current: root.openrouterLive ? "Live" : "Omarchy"
-          onChosen: function(value) { root.saveSetting("openrouterLive", value === "Live" ? "true" : "false", true) }
+          title: "OpenRouter usage source"
+          options: ["Local estimates", "OpenRouter API"]
+          current: root.openrouterLive ? "OpenRouter API" : "Local estimates"
+          onChosen: function(value) {
+            root.saveSetting("openrouterLive", value === "OpenRouter API" ? "true" : "false", true)
+          }
         }
 
         Row {

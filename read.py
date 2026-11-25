@@ -24,7 +24,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 ORDER = ["claude", "codex", "grok"]
 MAX_AGENTS = 8
@@ -129,18 +129,73 @@ def openrouter_keys():
     return clean(api), clean(manager)
 
 
-def openrouter_get(path, key, kind=dict):
+def openrouter_get(path, key, kind=dict, *, payload=None):
     request = urllib.request.Request(OPENROUTER_API + path, headers={
-        "Authorization": "Bearer " + key, "Accept": "application/json", "User-Agent": "omarchy-agent-stats"})
+        "Accept": "application/json", "Content-Type": "application/json",
+        "User-Agent": "omarchy-agent-stats"},
+        data=json.dumps(payload).encode() if payload is not None else None)
+    request.add_unredirected_header("Authorization", "Bearer " + key)
     with urllib.request.urlopen(request, timeout=8) as response:
         body = response.read(2_000_000)
-    data = json.loads(body).get("data")
+    response_data = json.loads(body)
+    data = response_data.get("data") if isinstance(response_data, dict) else None
     if not isinstance(data, kind):
         raise ValueError("no data")
     return data
 
 
 SPEND_FIELDS = (("usage_daily", "today"), ("usage_weekly", "week"), ("usage_monthly", "month"))
+
+
+def account_analytics(manager, now):
+    today = now.date()
+    week = today - timedelta(days=today.weekday())
+    month = today.replace(day=1)
+    start = month
+    for _ in range(3):
+        start = (start - timedelta(days=1)).replace(day=1)
+    response = openrouter_get("/analytics/query", manager, payload={
+        "metrics": ["tokens_total", "total_usage"],
+        "granularity": "day",
+        "time_range": {
+            "start": start.isoformat() + "T00:00:00Z",
+            "end": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        },
+    })
+    rows, metadata = response.get("data"), response.get("metadata")
+    if not isinstance(rows, list) or not isinstance(metadata, dict) or metadata.get("truncated") is not False:
+        raise ValueError("incomplete token results")
+    daily = {}
+    costs = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("invalid token row")
+        stamp, count = row.get("date__day"), row.get("tokens_total")
+        if not isinstance(stamp, str) or type(count) is not int or not 0 <= count < 10**13:
+            raise ValueError("invalid token row")
+        day = datetime.fromisoformat(stamp).date()
+        if not start <= day <= today or day in daily:
+            raise ValueError("unexpected token bucket")
+        daily[day] = count
+        costs[day] = money(row.get("total_usage"))
+    tokens = {
+        "date": today.isoformat(),
+        "today": daily.get(today, 0),
+        "week": sum(count for day, count in daily.items() if day >= week),
+        "month": sum(count for day, count in daily.items() if day >= month),
+    }
+    spend = None
+    if all(value is not None for value in costs.values()):
+        month_spend = sum(value for day, value in costs.items() if day >= month)
+        completed_days = (today - month).days
+        spend = {
+            "date": today.isoformat(),
+            "today": costs.get(today, 0),
+            "month": month_spend,
+            "dailyAverage": (month_spend - costs.get(today, 0)) / completed_days if completed_days else None,
+            "monthlyAverage": sum(value for day, value in costs.items() if day < month) / 3,
+        }
+    return tokens, spend
 
 
 def account_spend(manager):
@@ -181,6 +236,14 @@ def openrouter_live(cache_path):
         except (OSError, ValueError, urllib.error.URLError) as error:
             refused = isinstance(error, urllib.error.HTTPError) and error.code in (401, 403)
             errors.append("keys: " + ("refused" if refused else type(error).__name__))
+        try:
+            tokens, spend_stats = account_analytics(manager, datetime.now(timezone.utc))
+            result["tokens"] = tokens
+            if spend_stats is not None:
+                result["spendStats"] = spend_stats
+        except (OSError, ValueError):
+            # Token analytics permissions and availability are independent of spend.
+            pass
     # Otherwise, or if that failed, the one key's own spend and limit.
     if api and "scope" not in result:
         try:
@@ -215,6 +278,8 @@ def openrouter_live(cache_path):
     errors.extend(credit_errors)
     if not result:
         stale = dict(cached) if cached.get("ok") else {}
+        stale.pop("tokens", None)
+        stale.pop("spendStats", None)
         stale.update(ok=bool(stale), stale=True, error="; ".join(errors)[:80])
         return stale if stale.get("ok") else {"ok": False, "error": "; ".join(errors)[:80]}
     result.update(ok=True, stale=bool(errors), error="; ".join(errors)[:80], fetchedAt=time.time())
@@ -304,6 +369,12 @@ def main():
                        "currency": "USD", "today": live.get("today"), "week": live.get("week"),
                        "month": live.get("month"), "todaySince": "", "monthSince": "", "live": True,
                        "scope": text(live.get("scope") or "", 8), "keyCount": live.get("keyCount")}
+            tokens = live.get("tokens")
+            if isinstance(tokens, dict) and tokens.get("date") == datetime.now(timezone.utc).date().isoformat():
+                prepaid["tokens"] = tokens
+                stats = live.get("spendStats")
+                if isinstance(stats, dict) and stats.get("date") == tokens["date"]:
+                    prepaid["spendStats"] = stats
             if prepaid["remaining"] is None and obalance:
                 prepaid.update(remaining=obalance["remaining"], funded=obalance["funded"], spent=obalance["spent"])
             if live.get("scope") == "account":
