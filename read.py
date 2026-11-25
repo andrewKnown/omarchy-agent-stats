@@ -129,15 +129,34 @@ def openrouter_keys():
     return clean(api), clean(manager)
 
 
-def openrouter_get(path, key):
+def openrouter_get(path, key, kind=dict):
     request = urllib.request.Request(OPENROUTER_API + path, headers={
         "Authorization": "Bearer " + key, "Accept": "application/json", "User-Agent": "omarchy-agent-stats"})
     with urllib.request.urlopen(request, timeout=8) as response:
-        body = response.read(200_000)
+        body = response.read(2_000_000)
     data = json.loads(body).get("data")
-    if not isinstance(data, dict):
+    if not isinstance(data, kind):
         raise ValueError("no data")
     return data
+
+
+SPEND_FIELDS = (("usage_daily", "today"), ("usage_weekly", "week"), ("usage_monthly", "month"))
+
+
+def account_spend(manager):
+    """Spend today, this week and this month summed over every key on the
+    account, from the management-key-only GET /keys (paged)."""
+    totals, seen = {name: 0.0 for _, name in SPEND_FIELDS}, 0
+    for page in range(20):
+        keys = openrouter_get("/keys?offset=%d" % seen, manager, list)
+        if not keys:
+            break
+        for key in keys:
+            if isinstance(key, dict):
+                for field, name in SPEND_FIELDS:
+                    totals[name] += money(key.get(field)) or 0.0
+        seen += len(keys)
+    return {name: round(value, 4) for name, value in totals.items()}, seen
 
 
 def openrouter_live(cache_path):
@@ -154,10 +173,20 @@ def openrouter_live(cache_path):
     if cached.get("ok") and time.time() - fetched < OPENROUTER_MIN_AGE:
         return cached
     result, errors = {}, []
-    if api:
+    # With a management key, spend is the whole account's: every key summed.
+    if manager:
+        try:
+            spend, count = account_spend(manager)
+            result.update(spend, scope="account", keyCount=count)
+        except (OSError, ValueError, urllib.error.URLError) as error:
+            refused = isinstance(error, urllib.error.HTTPError) and error.code in (401, 403)
+            errors.append("keys: " + ("refused" if refused else type(error).__name__))
+    # Otherwise, or if that failed, the one key's own spend and limit.
+    if api and "scope" not in result:
         try:
             key = openrouter_get("/key", api)
-            for field, name in (("usage_daily", "today"), ("usage_weekly", "week"), ("usage_monthly", "month")):
+            result["scope"] = "key"
+            for field, name in SPEND_FIELDS:
                 value = money(key.get(field))
                 if value is not None:
                     result[name] = round(value, 4)
@@ -167,11 +196,10 @@ def openrouter_live(cache_path):
                 result["limitReset"] = text(key.get("limit_reset") or "", 12)
         except (OSError, ValueError, urllib.error.URLError) as error:
             errors.append("key: " + type(error).__name__)
-    # The management key first, then the inference key. A key OpenRouter
-    # refuses here only matters when no key gets the balance; an inference
-    # key's refusal is just no balance, not a fault.
+    # Either key may be the one OpenRouter answers /credits for; a refusal
+    # only matters when neither gets the balance.
     credit_errors = []
-    for credits_key in list(dict.fromkeys(k for k in (manager, api) if k)):
+    for credits_key in list(dict.fromkeys(k for k in (api, manager) if k)):
         try:
             credits = openrouter_get("/credits", credits_key)
             total, used = money(credits.get("total_credits")), money(credits.get("total_usage"))
@@ -181,8 +209,7 @@ def openrouter_live(cache_path):
             break
         except (OSError, ValueError, urllib.error.URLError) as error:
             refused = isinstance(error, urllib.error.HTTPError) and error.code in (401, 403)
-            if not (refused and credits_key == api and credits_key != manager):
-                credit_errors.append("credits: " + ("refused" if refused else type(error).__name__))
+            credit_errors.append("credits: " + ("refused" if refused else type(error).__name__))
             if not refused:
                 break
     errors.extend(credit_errors)
@@ -275,10 +302,13 @@ def main():
         if live and live.get("ok"):
             prepaid = {"remaining": live.get("remaining"), "funded": live.get("funded"), "spent": live.get("spent"),
                        "currency": "USD", "today": live.get("today"), "week": live.get("week"),
-                       "month": live.get("month"), "todaySince": "", "monthSince": "", "live": True}
+                       "month": live.get("month"), "todaySince": "", "monthSince": "", "live": True,
+                       "scope": text(live.get("scope") or "", 8), "keyCount": live.get("keyCount")}
             if prepaid["remaining"] is None and obalance:
                 prepaid.update(remaining=obalance["remaining"], funded=obalance["funded"], spent=obalance["spent"])
-            if not olimits and live.get("limit"):
+            if live.get("scope") == "account":
+                olimits = []  # one key's cap says little next to the whole account's spend
+            elif not olimits and live.get("limit"):
                 used = (live["limit"] - live["limitRemaining"]) / live["limit"]
                 reset = live.get("limitReset") or ""
                 olimits = [{"label": (reset.capitalize() + " key limit") if reset else "Key limit",

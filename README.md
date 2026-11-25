@@ -46,9 +46,10 @@ dollars. Hover shows the balance, spend today, this week (live only) and
 this month, and any key limit.
 
 Omarchy needs a key for OpenRouter. Put it in
-`~/.config/omarchy/agents/openrouter.json` as `{"apiKey": "sk-or-..."}`, and
-add a `managementKey` from openrouter.ai/settings/management-keys for the
-balance, which OpenRouter only gives to management keys.
+`~/.config/omarchy/agents/openrouter.json` as `{"apiKey": "sk-or-..."}`. Add a
+`managementKey` from openrouter.ai/settings/management-keys as well for
+account-wide live spend (below), and in case OpenRouter won't give your API
+key the balance.
 
 Spend can come from two places:
 
@@ -58,20 +59,17 @@ Spend can come from two places:
   starts counting when installed, so the first day and month show "since"
   times. Spend is account-wide.
 - **Live (`openrouterLive`, off by default).** The widget asks openrouter.ai
-  itself, at most once a minute: `GET /api/v1/key` for the key's exact spend
-  today, this week and this month (UTC days, weeks starting Monday) and its
-  limit, and `GET /api/v1/credits` for the balance. It reads the same key file
-  as Omarchy (or `OPENROUTER_API_KEY` / `OPENROUTER_MANAGEMENT_KEY` in the
-  environment) and sends the key only to openrouter.ai. The last answer is
-  cached in `~/.local/state/omarchy-agent-stats/openrouter-live.json` (numbers
-  only, never the key); a failed check keeps it, marked stale. Spend is the
-  key's own.
-
-Clicking an agent runs `launch.sh`, which starts that agent through Omarchy's
-own `omarchy-agent` launcher, so it opens in the same terminal with the same
-flags and active account as `Super` launches. Your default agent setting is
-never changed. Agents without a CLI (gateways and prepaid APIs) open the
-Agents panel instead.
+  itself, at most once a minute. With a management key it sums every key's
+  spend today, this week and this month from `GET /api/v1/keys`, so the
+  numbers cover the whole account (UTC days, weeks starting Monday; keys
+  deleted this period drop out of it). With only an API key, it reads that
+  key's own spend and credit limit from `GET /api/v1/key`. The balance comes
+  from `GET /api/v1/credits`, with whichever key OpenRouter accepts there. It
+  reads the same key file as Omarchy (or `OPENROUTER_API_KEY` /
+  `OPENROUTER_MANAGEMENT_KEY` in the environment) and sends the keys only to
+  openrouter.ai. The last answer is cached in
+  `~/.local/state/omarchy-agent-stats/openrouter-live.json` (numbers only,
+  never a key); a failed check keeps it, marked stale.
 
 ## Requirements
 

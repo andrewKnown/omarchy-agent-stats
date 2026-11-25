@@ -208,7 +208,9 @@ Panel {
       spent += " · month: " + money(p.month, p.currency)
       if (p.monthSince) spent += " (since " + sinceText(p.monthSince) + ")"
       lines.push(spent)
-      lines.push(p.live ? "Live from OpenRouter (UTC days)" : "From Omarchy's balance, counted locally")
+      lines.push(!p.live ? "From Omarchy's balance, counted locally"
+        : p.scope === "account" ? "Live from OpenRouter, all " + (p.keyCount || 0) + " keys (UTC days)"
+        : "Live from OpenRouter, this key only (UTC days)")
     }
     if (a.liveError) lines.push("Live check: " + a.liveError)
     for (var j = 0; j < a.limits.length; j++) {

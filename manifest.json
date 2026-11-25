@@ -114,7 +114,7 @@
         "type": "boolean",
         "label": "Query OpenRouter directly",
         "defaultValue": false,
-        "description": "Asks openrouter.ai once a minute for exact spend today, this week and this month (UTC) and the balance, using the key in OPENROUTER_API_KEY or ~/.config/omarchy/agents/openrouter.json. Off: numbers come from Omarchy's records and spend is counted locally."
+        "description": "Asks openrouter.ai once a minute for exact spend today, this week and this month (UTC) and the balance. With a management key the spend is the whole account's (every key summed), otherwise the one key's. Keys come from OPENROUTER_API_KEY / OPENROUTER_MANAGEMENT_KEY or ~/.config/omarchy/agents/openrouter.json. Off: numbers come from Omarchy's records and spend is counted locally."
       }
     ]
   }
