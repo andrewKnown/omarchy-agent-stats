@@ -46,7 +46,45 @@ Panel {
       least = Math.min(least, 100 - Number(agent.limits[i].percent))
     return Math.max(0, least)
   }
-  function isLow(agent) { return lowAlert !== "Off" && agent.limits.length > 0 && remaining(agent) <= lowAlertAt }
+  function limitLow(agent) { return agent.limits.length > 0 && remaining(agent) <= lowAlertAt }
+  // Prepaid balances (OpenRouter and the like): dollars, not percent.
+  readonly property real lowBalanceAt: Math.max(0, Number(setting("lowBalanceAt", 5)) || 0)
+  function balanceLow(agent) {
+    return !!agent.prepaid && lowBalanceAt > 0 && agent.prepaid.remaining !== null
+      && agent.prepaid.remaining !== undefined && Number(agent.prepaid.remaining) <= lowBalanceAt
+  }
+  function isLow(agent) { return lowAlert !== "Off" && (limitLow(agent) || balanceLow(agent)) }
+
+  readonly property string prepaidText: {
+    var v = String(setting("prepaidText", "Balance"))
+    return v === "Today" || v === "Month" ? v : "Balance"
+  }
+  readonly property bool openrouterLive: setting("openrouterLive", false) === true
+  readonly property bool hasPrepaid: {
+    for (var i = 0; i < agents.length; i++) if (agents[i].prepaid) return true
+    return false
+  }
+  function money(value, currency) {
+    if (value === null || value === undefined || isNaN(Number(value))) return "–"
+    var n = Number(value)
+    var sign = !currency || currency === "USD" ? "$" : currency + " "
+    if (n >= 10000) return sign + (n / 1000).toFixed(0) + "K"
+    if (n >= 1000) return sign + (n / 1000).toFixed(1) + "K"
+    if (n >= 100) return sign + n.toFixed(0)
+    return sign + n.toFixed(2)
+  }
+  function prepaidLabel(p) {
+    if (prepaidText === "Today") return money(p.today, p.currency) + "/d"
+    if (prepaidText === "Month") return money(p.month, p.currency) + "/mo"
+    return money(p.remaining, p.currency)
+  }
+  function sinceText(iso) {
+    var t = Date.parse(iso)
+    if (isNaN(t)) return ""
+    var d = new Date(t)
+    return d.toDateString() === new Date().toDateString()
+      ? Qt.formatTime(d, "hh:mm") : Qt.formatDate(d, "d MMM")
+  }
 
   // Omarchy's Agents plugin ships each agent's logo as assets/<id>.svg, with
   // an <id>-light.svg twin for light bars where the logo is white.
@@ -123,7 +161,7 @@ Panel {
 
   Process {
     id: reader
-    command: ["python3", "-I", root.scriptPath]
+    command: root.openrouterLive ? ["python3", "-I", root.scriptPath, "--openrouter-live"] : ["python3", "-I", root.scriptPath]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -161,12 +199,25 @@ Panel {
 
   function agentTooltip(a) {
     var lines = [a.name + (a.stale ? " (stale)" : "")]
+    var p = a.prepaid
+    if (p) {
+      lines.push("Balance: " + money(p.remaining, p.currency) + (p.funded ? " of " + money(p.funded, p.currency) + " bought" : ""))
+      var spent = "Spent today: " + money(p.today, p.currency)
+      if (p.todaySince) spent += " (since " + sinceText(p.todaySince) + ")"
+      if (p.week !== undefined && p.week !== null) spent += " · week: " + money(p.week, p.currency)
+      spent += " · month: " + money(p.month, p.currency)
+      if (p.monthSince) spent += " (since " + sinceText(p.monthSince) + ")"
+      lines.push(spent)
+      lines.push(p.live ? "Live from OpenRouter (UTC days)" : "From Omarchy's balance, counted locally")
+    }
+    if (a.liveError) lines.push("Live check: " + a.liveError)
     for (var j = 0; j < a.limits.length; j++) {
       var l = a.limits[j]
       var reset = untilText(l.resetsAt)
       lines.push(l.label + ": " + l.percent.toFixed(0) + "%" + (reset ? "  · resets in " + reset : ""))
     }
-    if (isLow(a)) lines.push("Low: " + remaining(a).toFixed(0) + "% left (alert at " + lowAlertAt + "%)")
+    if (lowAlert !== "Off" && limitLow(a)) lines.push("Low: " + remaining(a).toFixed(0) + "% left (alert at " + lowAlertAt + "%)")
+    if (lowAlert !== "Off" && balanceLow(a)) lines.push("Low balance (alert at " + money(lowBalanceAt, p.currency) + ")")
     lines.push("")
     lines.push((launchers[a.id] ? "Click: open " + a.name : "Click: Agents panel") + " · Right: menu · Middle: refresh")
     return lines.join("\n")
@@ -310,9 +361,11 @@ Panel {
           Column {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 2
+            visible: agentItem.modelData.limits.length > 0
 
             Repeater {
-              model: agentItem.modelData.limits.length > 1 ? [agentItem.shortWin, agentItem.longWin] : [agentItem.shortWin]
+              model: agentItem.modelData.limits.length > 1 ? [agentItem.shortWin, agentItem.longWin]
+                : agentItem.modelData.limits.length === 1 ? [agentItem.shortWin] : []
 
               Rectangle {
                 required property var modelData
@@ -329,6 +382,18 @@ Panel {
                 }
               }
             }
+          }
+
+          // Prepaid balance, or spend today / this month (prepaidText).
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: !!agentItem.modelData.prepaid
+            textFormat: Text.PlainText
+            text: agentItem.modelData.prepaid ? root.prepaidLabel(agentItem.modelData.prepaid) : ""
+            color: root.balanceLow(agentItem.modelData) ? root.hot : root.fg
+            font.family: root.font
+            font.pixelSize: 11
+            font.bold: true
           }
         }
 
@@ -448,6 +513,30 @@ Panel {
           options: ["5", "10", "20", "30"]
           current: String(root.lowAlertAt)
           onChosen: function(value) { root.saveSetting("lowAlertAt", value, true) }
+        }
+
+        MenuChoice {
+          visible: root.hasPrepaid || root.openrouterLive
+          title: "Prepaid shows"
+          options: ["Balance", "Today", "Month"]
+          current: root.prepaidText
+          onChosen: function(value) { root.saveSetting("prepaidText", value, false) }
+        }
+
+        MenuChoice {
+          visible: root.hasPrepaid || root.openrouterLive
+          title: "Low balance at"
+          options: ["Off", "$1", "$5", "$10", "$20"]
+          current: root.lowBalanceAt > 0 ? "$" + root.lowBalanceAt : "Off"
+          onChosen: function(value) { root.saveSetting("lowBalanceAt", value === "Off" ? "0" : value.slice(1), true) }
+        }
+
+        MenuChoice {
+          visible: root.hasPrepaid || root.openrouterLive
+          title: "OpenRouter numbers"
+          options: ["Omarchy", "Live"]
+          current: root.openrouterLive ? "Live" : "Omarchy"
+          onChosen: function(value) { root.saveSetting("openrouterLive", value === "Live" ? "true" : "false", true) }
         }
 
         Row {

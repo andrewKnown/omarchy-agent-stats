@@ -19,7 +19,8 @@ An agent whose limits couldn't be refreshed is shown faded. After the meters,
 | Middle click | Refresh usage now | Refresh usage now |
 
 The right-click menu switches the badge between letters and logos, turns the
-activity pulse on or off, sets the low usage alert and its threshold, opens
+activity pulse on or off, sets the low usage alert and its threshold, sets what prepaid agents show,
+the low balance alert and live OpenRouter checks (shown once one is set up), opens
 the Agents panel, and refreshes. Choices are
 saved to the widget's entry in `~/.config/omarchy/shell.json` through
 `omarchy bar set`. You can also toggle the menu from a keybinding or script:
@@ -33,8 +34,38 @@ omarchy-shell io.github.andrewknown.agent-stats toggle
 The widget does no collection of its own. It reads the usage records that
 Omarchy's built-in **Agents** plugin (`omarchy.agents`) keeps in
 `~/.local/state/omarchy/agents/usage/`, through a small bundled Python script
-(`read.py`). It makes no network requests and only reads local files (plus
-`/proc` when the activity pulse is on).
+(`read.py`). By default it makes no network requests and only reads local
+files (plus `/proc` when the activity pulse is on).
+
+## Prepaid balances (OpenRouter)
+
+Prepaid accounts that Omarchy tracks (OpenRouter, DeepSeek, Fireworks) get a
+section showing the remaining balance, or what was spent today or this month
+(`prepaidText`). The ring turns on when the balance reaches `lowBalanceAt`
+dollars. Hover shows the balance, spend today, this week (live only) and
+this month, and any key limit.
+
+Omarchy needs a key for OpenRouter. Put it in
+`~/.config/omarchy/agents/openrouter.json` as `{"apiKey": "sk-or-..."}`, and
+add a `managementKey` from openrouter.ai/settings/management-keys for the
+balance, which OpenRouter only gives to management keys.
+
+Spend can come from two places:
+
+- **Omarchy (default).** Omarchy records only the all-time total spent, so the
+  widget keeps a snapshot of it at the start of each day and month in
+  `~/.local/state/omarchy-agent-stats/spend.json`. No network and no keys. It
+  starts counting when installed, so the first day and month show "since"
+  times. Spend is account-wide.
+- **Live (`openrouterLive`, off by default).** The widget asks openrouter.ai
+  itself, at most once a minute: `GET /api/v1/key` for the key's exact spend
+  today, this week and this month (UTC days, weeks starting Monday) and its
+  limit, and `GET /api/v1/credits` for the balance. It reads the same key file
+  as Omarchy (or `OPENROUTER_API_KEY` / `OPENROUTER_MANAGEMENT_KEY` in the
+  environment) and sends the key only to openrouter.ai. The last answer is
+  cached in `~/.local/state/omarchy-agent-stats/openrouter-live.json` (numbers
+  only, never the key); a failed check keeps it, marked stale. Spend is the
+  key's own.
 
 Clicking an agent runs `launch.sh`, which starts that agent through Omarchy's
 own `omarchy-agent` launcher, so it opens in the same terminal with the same
@@ -71,6 +102,9 @@ Set these on the widget's entry in `~/.config/omarchy/shell.json`, or with
 | `activityPulse` | `false` | Gently pulse an agent's badge while its CLI is working |
 | `lowAlert` | `Off` | `Ring` draws a ring in the bar's urgent colour around an agent when any of its limits is nearly used up; `Pulse` makes that ring breathe |
 | `lowAlertAt` | `10` | Remaining percentage (1–50) at or below which the ring appears. The menu offers 5, 10, 20 and 30; any other value can be set here |
+| `prepaidText` | `Balance` | What a prepaid agent shows: `Balance`, `Today` (spent today) or `Month` (spent this month) |
+| `lowBalanceAt` | `5` | Dollars of balance at or below which a prepaid agent gets the ring; `0` turns it off |
+| `openrouterLive` | `false` | Ask openrouter.ai directly for exact spend and balance (see above) |
 | `warnAt` | `80` | Percentage at which a meter turns urgent |
 | `refreshIntervalSec` | `60` | How often the local usage files are re-read |
 
