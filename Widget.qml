@@ -8,7 +8,7 @@ import qs.Ui
 // (5-hour) window on top and the longest window below. It only reads the
 // records omarchy-agent-usage-update writes (via read.py). Click an agent to
 // open it in a terminal (launch.sh), right click for this widget's menu
-// (badge style, pulse, Agents panel, refresh), middle click to refresh.
+// (badge style, pulse, low usage alert, Agents panel, refresh), middle click to refresh.
 //
 // The root is Omarchy's popup base (Panel) rather than BarWidget so the menu
 // can be a standard bar popup; it carries the same bar/settings API.
@@ -32,6 +32,21 @@ Panel {
   property var busyIds: []
   readonly property bool useLogos: String(setting("badgeStyle", "Letters")) === "Logos"
   readonly property bool activityPulse: setting("activityPulse", false) === true
+  // Low usage alert: a ring around an agent once any of its limits has this
+  // much or less remaining. "Ring" is steady, "Pulse" breathes.
+  readonly property string lowAlert: {
+    var v = String(setting("lowAlert", "Off"))
+    return v === "Ring" || v === "Pulse" ? v : "Off"
+  }
+  readonly property real lowAlertAt: Math.max(1, Math.min(50, Number(setting("lowAlertAt", 10)) || 10))
+  // The tightest limit (least remaining) of an agent, as remaining percent.
+  function remaining(agent) {
+    var least = 100
+    for (var i = 0; i < agent.limits.length; i++)
+      least = Math.min(least, 100 - Number(agent.limits[i].percent))
+    return Math.max(0, least)
+  }
+  function isLow(agent) { return lowAlert !== "Off" && agent.limits.length > 0 && remaining(agent) <= lowAlertAt }
 
   // Omarchy's Agents plugin ships each agent's logo as assets/<id>.svg, with
   // an <id>-light.svg twin for light bars where the logo is white.
@@ -151,6 +166,7 @@ Panel {
       var reset = untilText(l.resetsAt)
       lines.push(l.label + ": " + l.percent.toFixed(0) + "%" + (reset ? "  · resets in " + reset : ""))
     }
+    if (isLow(a)) lines.push("Low: " + remaining(a).toFixed(0) + "% left (alert at " + lowAlertAt + "%)")
     lines.push("")
     lines.push((launchers[a.id] ? "Click: open " + a.name : "Click: Agents panel") + " · Right: menu · Middle: refresh")
     return lines.join("\n")
@@ -212,6 +228,30 @@ Panel {
         readonly property var longWin: root.longLimit(modelData.limits)
         implicitWidth: root.vertical ? root.barSize : meters.implicitWidth + 10
         implicitHeight: root.vertical ? meters.implicitHeight + 8 : root.barSize
+
+        // Low usage ring: a soft tint and outline in the bar's urgent colour.
+        Rectangle {
+          id: lowRing
+          readonly property bool low: root.isLow(agentItem.modelData)
+          anchors.fill: parent
+          anchors.margins: 2
+          anchors.leftMargin: 1
+          anchors.rightMargin: 1
+          radius: Math.min(width, height) / 3
+          visible: low
+          color: Qt.rgba(root.hot.r, root.hot.g, root.hot.b, 0.14)
+          border.color: root.hot
+          border.width: 1.5
+          opacity: 1.0
+
+          SequentialAnimation on opacity {
+            running: lowRing.low && root.lowAlert === "Pulse"
+            loops: Animation.Infinite
+            alwaysRunToEnd: true
+            NumberAnimation { to: 0.25; duration: 1100; easing.type: Easing.InOutSine }
+            NumberAnimation { to: 1.0; duration: 1100; easing.type: Easing.InOutSine }
+          }
+        }
 
         Row {
           id: meters
@@ -394,6 +434,20 @@ Panel {
           options: ["Off", "On"]
           current: root.activityPulse ? "On" : "Off"
           onChosen: function(value) { root.saveSetting("activityPulse", value === "On" ? "true" : "false", true) }
+        }
+
+        MenuChoice {
+          title: "Low usage alert"
+          options: ["Off", "Ring", "Pulse"]
+          current: root.lowAlert
+          onChosen: function(value) { root.saveSetting("lowAlert", value, false) }
+        }
+
+        MenuChoice {
+          title: "Alert at % remaining"
+          options: ["5", "10", "20", "30"]
+          current: String(root.lowAlertAt)
+          onChosen: function(value) { root.saveSetting("lowAlertAt", value, true) }
         }
 
         Row {

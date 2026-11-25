@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.andrewknown.agent-stats",
   "name": "Omarchy Agent Stats",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "andrewKnown",
   "license": "MIT",
   "description": "Per-agent rate-limit meters and today's token total in the bar, built on Omarchy's own Agents usage data. Click an agent to open it in a terminal.",
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Agent Stats",
-    "description": "Two thin meters per subscription (session over weekly) and today's total tokens. Click an agent to launch it, right click for a menu (badge style, pulse, Agents panel), middle click to refresh.",
+    "description": "Two thin meters per subscription (session over weekly) and today's total tokens, with an optional ring when a limit is nearly used up. Click an agent to launch it, right click for a menu (badge style, pulse, low usage alert, Agents panel), middle click to refresh.",
     "category": "AI",
     "allowMultiple": false,
     "defaultSection": "right",
@@ -22,7 +22,9 @@
       "refreshIntervalSec": 60,
       "warnAt": 80,
       "badgeStyle": "Letters",
-      "activityPulse": false
+      "activityPulse": false,
+      "lowAlert": "Off",
+      "lowAlertAt": 10
     },
     "schema": [
       {
@@ -60,6 +62,27 @@
         "label": "Pulse while an agent is working",
         "defaultValue": false,
         "description": "Gently pulses an agent's badge while its CLI is busy. Checks local process CPU every 3 seconds."
+      },
+      {
+        "key": "lowAlert",
+        "type": "enum",
+        "label": "Low usage alert",
+        "options": [
+          "Off",
+          "Ring",
+          "Pulse"
+        ],
+        "defaultValue": "Off",
+        "description": "Draws a ring in the bar's urgent colour around an agent when any of its limits is nearly used up. Pulse makes the ring breathe."
+      },
+      {
+        "key": "lowAlertAt",
+        "type": "integer",
+        "label": "Alert when remaining is at or below (%)",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "defaultValue": 10
       }
     ]
   }

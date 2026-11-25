@@ -19,7 +19,8 @@ An agent whose limits couldn't be refreshed is shown faded. After the meters,
 | Middle click | Refresh usage now | Refresh usage now |
 
 The right-click menu switches the badge between letters and logos, turns the
-activity pulse on or off, opens the Agents panel, and refreshes. Choices are
+activity pulse on or off, sets the low usage alert and its threshold, opens
+the Agents panel, and refreshes. Choices are
 saved to the widget's entry in `~/.config/omarchy/shell.json` through
 `omarchy bar set`. You can also toggle the menu from a keybinding or script:
 
@@ -68,6 +69,8 @@ Set these on the widget's entry in `~/.config/omarchy/shell.json`, or with
 |---|---|---|
 | `badgeStyle` | `Letters` | `Letters` (CL, CX, GK) or `Logos`, the agents' logos from Omarchy's Agents plugin |
 | `activityPulse` | `false` | Gently pulse an agent's badge while its CLI is working |
+| `lowAlert` | `Off` | `Ring` draws a ring in the bar's urgent colour around an agent when any of its limits is nearly used up; `Pulse` makes that ring breathe |
+| `lowAlertAt` | `10` | Remaining percentage (1–50) at or below which the ring appears. The menu offers 5, 10, 20 and 30; any other value can be set here |
 | `warnAt` | `80` | Percentage at which a meter turns urgent |
 | `refreshIntervalSec` | `60` | How often the local usage files are re-read |
 
