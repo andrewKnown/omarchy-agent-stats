@@ -167,25 +167,30 @@ def openrouter_live(cache_path):
                 result["limitReset"] = text(key.get("limit_reset") or "", 12)
         except (OSError, ValueError, urllib.error.URLError) as error:
             errors.append("key: " + type(error).__name__)
-    for credits_key in [k for k in (manager, api) if k]:
+    # The management key first, then the inference key. A key OpenRouter
+    # refuses here only matters when no key gets the balance; an inference
+    # key's refusal is just no balance, not a fault.
+    credit_errors = []
+    for credits_key in list(dict.fromkeys(k for k in (manager, api) if k)):
         try:
             credits = openrouter_get("/credits", credits_key)
             total, used = money(credits.get("total_credits")), money(credits.get("total_usage"))
             if total is not None and used is not None:
                 result.update(remaining=round(max(0.0, total - used), 4), funded=round(total, 4), spent=round(used, 4))
+            credit_errors = []
             break
         except (OSError, ValueError, urllib.error.URLError) as error:
             refused = isinstance(error, urllib.error.HTTPError) and error.code in (401, 403)
-            # An inference key may be refused here; that's no balance, not a fault.
-            if not (refused and credits_key == api):
-                errors.append("credits: " + type(error).__name__)
+            if not (refused and credits_key == api and credits_key != manager):
+                credit_errors.append("credits: " + ("refused" if refused else type(error).__name__))
             if not refused:
                 break
+    errors.extend(credit_errors)
     if not result:
         stale = dict(cached) if cached.get("ok") else {}
         stale.update(ok=bool(stale), stale=True, error="; ".join(errors)[:80])
         return stale if stale.get("ok") else {"ok": False, "error": "; ".join(errors)[:80]}
-    result.update(ok=True, stale=bool(errors), fetchedAt=time.time())
+    result.update(ok=True, stale=bool(errors), error="; ".join(errors)[:80], fetchedAt=time.time())
     save_spend(cache_path, result)
     return result
 
