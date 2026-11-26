@@ -115,6 +115,14 @@ input/output tokens per model on hover. Click it to open AI Studio's usage page.
 - Google's account may ask for a fresh sign-in now and then; Gemini then shows
   stale with a hint to run `gcloud auth login`.
 
+## Tokens today (Σ)
+
+Σ adds up today's tokens across every agent Omarchy counts, hidden ones
+included, plus OpenRouter's from its live analytics (Omarchy's own OpenRouter
+count only covers completed days when it uses the management key) and the
+Gemini API's. Hover it for the per-agent breakdown. Cursor, Grok and Grok Bot
+report no token counts, so they add nothing.
+
 ## How fresh the numbers are
 
 Omarchy's Agents plugin refreshes the usage records on its own schedule, every
@@ -124,7 +132,7 @@ numbers, best effort. `Max` is the shortest interval each source allows:
 
 | Source | `Off` (default) | `Max` | `3m` … `15m` |
 |---|---|---|---|
-| Claude limits and tokens | Omarchy's schedule | every 5 min | that interval, at least 5 min |
+| Claude limits and tokens (Claude's tokens are counted in the same run that asks Anthropic) | Omarchy's schedule | every 5 min | that interval, at least 5 min |
 | Other agents' limits and tokens (Codex, Grok, Antigravity, Cursor, …) | Omarchy's schedule | every minute | that interval |
 | Claude extra usage | every 5 min | every 5 min | that interval, at least 5 min |
 | OpenRouter (live) | every minute | every 30 s | that interval |
@@ -148,8 +156,8 @@ Why those floors:
   stricter limit and its spend figures are live.
 - **Gemini, 1 min:** Google Cloud Monitoring records these metrics per minute.
 
-Agents are refreshed with Omarchy's own `omarchy agent usage-update` for just
-the agents shown: a full refresh (limits and today's tokens), since the
+Agents are refreshed with Omarchy's own `omarchy agent usage-update` for the
+agents shown, and any hidden one with tokens today: a full refresh (limits and today's tokens), since the
 `--limits-only` kind reuses the token scan for up to 15 minutes. Middle-click
 forces a full refresh at any time, the network checks included (Claude's
 extra usage still waits out any "too many requests" and stays a minute clear of

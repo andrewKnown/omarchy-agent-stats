@@ -376,14 +376,21 @@ Panel {
       // A full refresh, not --limits-only: that one reuses the token scan for
       // up to 15 minutes, which left Σ tokens behind the meters.
       var cmd = ["omarchy-agent-usage-update"]
-      for (var i = 0; i < root.visibleAgents.length; i++) {
-        var id = String(root.visibleAgents[i].id)
+      // The agents in the bar, plus any hidden (or meter-less) one with tokens
+      // today, so Σ keeps up with every agent it adds up.
+      var due = root.visibleAgents.map(function(a) { return { id: String(a.id), checkedAt: a.checkedAt } })
+      for (var t = 0; t < root.todayByAgent.length; t++) {
+        var tid = String(root.todayByAgent[t].id || "")
+        if (tid && !due.some(function(d) { return d.id === tid })) due.push({ id: tid, checkedAt: 0 })
+      }
+      for (var i = 0; i < due.length; i++) {
+        var id = due[i].id
         if (!/^[a-z][a-z0-9-]{0,23}$/.test(id) || (id === "openrouter" && root.openrouterLive) || id === "gemini-api") continue
         var gap = Math.max(root.nudgeMin, root.providerFloorMin[id] || 1) * 60000
         // Due once its full gap has passed since the last check by either this
         // widget or Omarchy itself (a few seconds' slack for timing), so Claude
         // is never asked more often than Anthropic allows.
-        var last = Math.max(root.lastNudge[id] || 0, (Number(root.visibleAgents[i].checkedAt) || 0) * 1000)
+        var last = Math.max(root.lastNudge[id] || 0, (Number(due[i].checkedAt) || 0) * 1000)
         if (now - last < gap - 3000) continue
         root.lastNudge[id] = now
         cmd.push(id)

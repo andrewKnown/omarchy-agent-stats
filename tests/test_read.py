@@ -105,6 +105,23 @@ class Caches(unittest.TestCase):
         self.assertEqual(by_id["claude"]["extra"]["used"], 27.26)
         self.assertEqual(by_id["gemini-api"]["gemini"]["tokens"], 30)
 
+    def test_sigma_counts_openrouter_live_and_gemini(self):
+        from datetime import timezone
+        with Sandbox() as box:
+            box.write_record("claude", {"limits": [{"label": "W", "percent": 0.1}], "todayTotalTokens": 1000})
+            box.write_record("openrouter", {"name": "OpenRouter", "limits": [], "todayTotalTokens": 0,
+                                            "balance": {"remaining": 3, "funded": 5, "spent": 2}})
+            box.write_cache("openrouter-live.json", {"ok": True, "remaining": 3, "funded": 5, "spent": 2, "today": 0.1,
+                                                     "scope": "account", "checkedAt": time.time(),
+                                                     "tokens": {"date": datetime.now(timezone.utc).date().isoformat(), "today": 500}})
+            box.write_cache("gemini.json", {"ok": True, "projects": ["proj-abcdef"], "day": datetime.now().date().isoformat(),
+                                            "requests": 1, "errors": 0, "models": {"m": {"in": 200, "out": 50}},
+                                            "perProject": [], "checkedAt": time.time()})
+            out = run_read("--openrouter-live", "--gemini-projects=proj-abcdef")
+        self.assertEqual(out["todayTokens"], 1750)
+        self.assertEqual([(t["id"], t["tokens"]) for t in out["todayByAgent"]],
+                         [("claude", 1000), ("gemini-api", 250), ("openrouter", 500)])
+
     def test_old_result_is_stale(self):
         with Sandbox() as box:
             box.write_record("claude", {"limits": [{"label": "Weekly", "percent": 1.0}]})

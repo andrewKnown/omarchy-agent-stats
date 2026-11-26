@@ -122,7 +122,7 @@ def main():
     usage_dir = os.path.join(state, "omarchy", "agents", "usage")
     openrouter_record = None
     agents = []
-    today = []  # (name, tokens) for every agent with tokens today, limits or not
+    today = {}  # id -> (name, tokens) for every agent with tokens today, limits or not
     try:
         names = sorted(n for n in os.listdir(usage_dir) if n.endswith(".json"))
     except OSError:
@@ -145,7 +145,7 @@ def main():
         except (TypeError, ValueError):
             tokens = 0
         if 0 < tokens < 10**13:
-            today.append((agent_name, tokens))
+            today[agent_id] = (agent_name, tokens)
         raw = record.get("limits")
         if not isinstance(raw, list):
             raw = []
@@ -202,6 +202,12 @@ def main():
             tokens = live.get("tokens")
             if isinstance(tokens, dict) and tokens.get("date") == datetime.now(timezone.utc).date().isoformat():
                 prepaid["tokens"] = tokens
+                # With a management key Omarchy counts OpenRouter's tokens from
+                # completed days only, so today reads 0 there; the live
+                # analytics have today's (a UTC day).
+                live_today = int(money(tokens.get("today")) or 0)
+                if live_today > today.get(oid, ("", 0))[1]:
+                    today[oid] = (oname, live_today)
                 stats = live.get("spendStats")
                 if isinstance(stats, dict) and stats.get("date") == tokens["date"]:
                     prepaid["spendStats"] = stats
@@ -256,6 +262,8 @@ def main():
         if g.get("ok"):
             entry["gemini"] = {k: g.get(k) for k in ("requests", "errors", "models", "perProject")}
             entry["gemini"]["tokens"] = sum(c["in"] + c["out"] for c in (g.get("models") or {}).values())
+            if 0 < entry["gemini"]["tokens"] < 10**13:
+                today["gemini-api"] = ("Gemini API", int(entry["gemini"]["tokens"]))
         if g.get("error"):
             entry["liveError"] = text(g["error"], 80)
         agents.append(entry)
@@ -265,11 +273,11 @@ def main():
 
     # Providers in alphabetical order by name, everywhere they're listed.
     agents.sort(key=lambda agent: (agent["name"].lower(), agent["id"]))
-    today.sort(key=lambda item: item[0].lower())
+    by_agent = sorted(((aid, name, tokens) for aid, (name, tokens) in today.items()), key=lambda item: item[1].lower())
     json.dump({
         "agents": agents[:MAX_AGENTS],
-        "todayTokens": sum(t for _, t in today),
-        "todayByAgent": [{"name": n, "tokens": t} for n, t in today[:MAX_AGENTS]],
+        "todayTokens": sum(t for _, _, t in by_agent),
+        "todayByAgent": [{"id": i, "name": n, "tokens": t} for i, n, t in by_agent[:MAX_AGENTS]],
     }, sys.stdout)
 
 
