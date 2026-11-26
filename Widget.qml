@@ -331,6 +331,16 @@ Panel {
     cursor: "cursor-agent", kimi: "kimi", qwen: "qwen", muse: "muse",
     hermes: "hermes", devin: "devin", agy: "agy", opencode: "opencode"
   })
+  // Providers with no app or CLI to start open their own usage page instead.
+  readonly property var webPages: ({
+    "gemini-api": "https://aistudio.google.com/usage",
+    openrouter: "https://openrouter.ai/activity",
+    grokbot: "https://cursor.com/dashboard",
+    deepseek: "https://platform.deepseek.com/usage"
+  })
+  function launch(id, launcher) {
+    Quickshell.execDetached(["bash", launchScript, launcher, webPages[id] || ""])
+  }
   readonly property string launchScript: Qt.resolvedUrl("launch.sh").toString().replace("file://", "")
 
   function agentTooltip(a) {
@@ -404,7 +414,8 @@ Panel {
     if (lowAlert !== "Off" && limitLow(a)) lines.push("Low: " + remaining(a).toFixed(0) + "% left (alert at " + lowAlertAt + "%)")
     if (lowAlert !== "Off" && balanceLow(a)) lines.push("Low balance (alert at " + money(lowBalanceAt, p.currency) + ")")
     lines.push("")
-    lines.push((launchers[a.id] ? "Click: open " + a.name : a.id === "gemini-api" ? "Click: AI Studio usage"
+    lines.push((launchers[a.id] ? "Click: open " + a.name
+      : webPages[a.id] ? "Click: " + webPages[a.id].replace(/^https:\/\//, "").split("/")[0] + " usage"
       : "Click: Agents panel") + " · Right: menu · Middle: refresh")
     return lines.join("\n")
   }
@@ -603,13 +614,12 @@ Panel {
               refreshLater.restart()
             } else if (button === Qt.RightButton) {
               root.toggle()
-            } else if (agentItem.modelData.id === "gemini-api") {
-              // Gemini isn't in Omarchy's Agents panel; its own usage page is.
-              Quickshell.execDetached(["xdg-open", "https://aistudio.google.com/usage"])
+            } else if (!launcher && root.webPages[agentItem.modelData.id]) {
+              Quickshell.execDetached(["xdg-open", root.webPages[agentItem.modelData.id]])
             } else if (!launcher) {
               root.openPanel()
             } else {
-              Quickshell.execDetached(["bash", root.launchScript, launcher])
+              root.launch(agentItem.modelData.id, launcher)
             }
           }
         }
