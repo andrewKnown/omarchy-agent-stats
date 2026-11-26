@@ -69,7 +69,8 @@ def openrouter_get(path, key, kind=dict, *, payload=None):
         "User-Agent": "omarchy-agent-stats"},
         data=json.dumps(payload).encode() if payload is not None else None)
     request.add_unredirected_header("Authorization", "Bearer " + key)
-    with urllib.request.urlopen(request, timeout=8) as response:
+    # Checks run in the background, so a slow answer only costs this check.
+    with urllib.request.urlopen(request, timeout=20) as response:
         body = response.read(2_000_000)
     response_data = json.loads(body)
     data = response_data.get("data") if isinstance(response_data, dict) else None
@@ -170,6 +171,10 @@ def openrouter_live(cache_path):
         except (OSError, ValueError, urllib.error.URLError) as error:
             refused = isinstance(error, urllib.error.HTTPError) and error.code in (401, 403)
             errors.append("keys: " + ("refused" if refused else type(error).__name__))
+            # A slow or failed answer isn't a refusal: keep the account's last
+            # figures rather than swap in one key's, which tell another story.
+            if not refused and cached.get("ok") and cached.get("scope") == "account":
+                result.update({k: cached[k] for k in ("today", "week", "month", "scope", "keyCount") if k in cached})
         try:
             tokens, spend_stats = account_analytics(manager, datetime.now(timezone.utc))
             result["tokens"] = tokens
@@ -210,6 +215,9 @@ def openrouter_live(cache_path):
             if not refused:
                 break
     errors.extend(credit_errors)
+    # Likewise a balance that couldn't be read this time keeps its last value.
+    if credit_errors and "remaining" not in result and cached.get("ok") and result:
+        result.update({k: cached[k] for k in ("remaining", "funded", "spent") if k in cached})
     if not result:
         stale = dict(cached) if cached.get("ok") else {}
         stale.pop("tokens", None)

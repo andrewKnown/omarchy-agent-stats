@@ -131,6 +131,27 @@ class OpenRouter(unittest.TestCase):
         self.assertEqual((result["today"], result["scope"], result["limit"]), (0.83, "key", 20))
         self.assertTrue(result["stale"])
 
+    def test_slow_keys_answer_keeps_account_figures(self):
+        with Sandbox() as box:
+            self.keys(box, apiKey="inference", managementKey="manager")
+            cache = os.path.join(box.plugin_state, "or.json")
+            r = remote()
+            r.openrouter_get = self.fake()
+            good = r.openrouter_live(cache)
+            good["fetchedAt"] -= 600
+            r.save_spend(cache, good)
+            fast = self.fake()
+
+            def slow_keys(path, key, kind=dict, *, payload=None):
+                if path.startswith("/keys"):
+                    raise TimeoutError("slow")
+                return fast(path, key, kind, payload=payload)
+            r.openrouter_get = slow_keys
+            result = r.openrouter_live(cache)
+        self.assertEqual((result["today"], result["month"], result["scope"]), (1.5, 4.0, "account"))
+        self.assertNotIn("limit", result)
+        self.assertTrue(result["stale"])
+
     def test_outage_keeps_last_good_answer(self):
         with Sandbox() as box:
             self.keys(box, apiKey="inference", managementKey="manager")
