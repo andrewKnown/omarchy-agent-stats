@@ -18,12 +18,18 @@ An agent whose limits couldn't be refreshed is shown faded. After the meters,
 | Right click | Open the menu | Open the menu |
 | Middle click | Refresh usage now | Refresh usage now |
 
-The right-click menu switches the badge between letters and logos, turns the
-activity pulse on or off, sets the low usage alert and its threshold, sets what prepaid agents show,
-the low balance alert and live OpenRouter checks (shown once one is set up),
-turns the Claude extra-usage check on or off, sets the update frequency, opens
-the Agents panel, and refreshes. Choices are
-saved to the widget's entry in `~/.config/omarchy/shell.json` through
+The right-click menu:
+
+- **Agent badge**: letters or logos. **Pulse while working**: on or off.
+- **Low usage alert** and **Alert at % remaining**: the ring, and when it appears.
+- **Prepaid shows**, **Low balance at**, **OpenRouter usage source**: prepaid
+  providers (shown once one is set up).
+- **Claude extra usage** and **Extra usage shows**: the extra-usage check.
+- **Update frequency**: how often numbers refresh.
+- **Show in bar**: each provider on or off.
+- **Providers & keys…**, **Agents panel**, **Refresh**.
+
+Choices are saved to the widget's entry in `~/.config/omarchy/shell.json` through
 `omarchy bar set`. You can also toggle the menu from a keybinding or script:
 
 ```bash
@@ -37,6 +43,32 @@ Omarchy's built-in **Agents** plugin (`omarchy.agents`) keeps in
 `~/.local/state/omarchy/agents/usage/`, through a small bundled Python script
 (`read.py`). By default it makes no network requests and only reads local
 files (plus `/proc` when the activity pulse is on).
+
+## Providers and keys
+
+The widget shows every provider Omarchy's Agents plugin tracks that has limits
+or a balance (Claude, Codex, Grok, OpenRouter, Copilot, Cursor, Antigravity,
+DeepSeek, Kimi, Z.ai, Ollama Cloud and more, as you sign in to them).
+
+**Providers & keys…** in the menu opens a small setup screen in Omarchy's
+floating terminal (`providers.py`). It lists every provider with what Omarchy
+currently reports, and for each one:
+
+- **OpenRouter, Z.ai, Ollama Cloud**: set, replace or remove the API key (and
+  OpenRouter's management key), typed hidden and saved owner-only in Omarchy's
+  own `~/.config/omarchy/agents/<provider>.json`, so Omarchy uses it too. An
+  environment variable such as `OPENROUTER_API_KEY` still takes precedence and
+  is shown as such.
+- **Claude, Codex, Grok**: sign in or add an account through Omarchy's own
+  `omarchy agent account add`, or list accounts.
+- **Everyone else**: Omarchy reads the provider's own app or CLI sign-in; the
+  screen shows Omarchy's hint for it.
+- **Test** re-collects that provider with Omarchy's updater and shows the result.
+
+Keys are never shown in full or written anywhere else.
+
+**Show in bar** in the menu toggles each provider on or off in the bar
+(`hiddenAgents`, a comma-separated list of ids such as `grok,kimi`).
 
 ## How fresh the numbers are
 
@@ -160,6 +192,7 @@ Set these on the widget's entry in `~/.config/omarchy/shell.json`, or with
 | `claudeExtra` | `false` | Ask Anthropic for Claude's extra-usage spend this month (see above) |
 | `extraText` | `Left` | While on extra usage, show the credit `Left` ($ and %) or the amount `Spent` |
 | `warnAt` | `80` | Percentage at which a meter turns urgent |
+| `hiddenAgents` | `""` | Comma-separated provider ids to leave out of the bar |
 | `updateFrequency` | `Off` | `Off`, `Max`, `3m`, `5m`, `10m` or `15m` (see "How fresh the numbers are") |
 | `refreshIntervalSec` | `60` | How often the local usage files are re-read |
 

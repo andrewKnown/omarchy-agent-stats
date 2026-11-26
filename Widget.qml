@@ -29,6 +29,22 @@ Panel {
   }
 
   property var agents: []
+  // Providers hidden from the bar (hiddenAgents: comma-separated ids, e.g.
+  // "grok,kimi"); the menu's Show in bar row lists them all.
+  readonly property var hiddenAgents: String(setting("hiddenAgents", "") || "").split(",")
+    .map(function(x) { return x.trim() }).filter(function(x) { return /^[a-z][a-z0-9-]{0,23}$/.test(x) })
+  readonly property var visibleAgents: agents.filter(function(a) { return hiddenAgents.indexOf(String(a.id)) === -1 })
+  function setHidden(id, hide) {
+    var list = hiddenAgents.filter(function(x) { return x !== id })
+    if (hide) list.push(id)
+    saveSetting("hiddenAgents", list.join(","), false)
+  }
+  // The provider setup wizard (providers.py) in Omarchy's floating terminal.
+  readonly property string providersScript: Qt.resolvedUrl("providers.py").toString().replace("file://", "")
+  function openProviders() {
+    var quoted = "'" + providersScript.replace(/'/g, "'\\''") + "'"
+    Quickshell.execDetached(["omarchy-launch-floating-terminal-with-presentation", "python3 -I " + quoted])
+  }
   property var busyIds: []
   readonly property bool useLogos: String(setting("badgeStyle", "Letters")) === "Logos"
   readonly property bool activityPulse: setting("activityPulse", false) === true
@@ -167,7 +183,7 @@ Panel {
   Timer {
     interval: 3000
     repeat: true
-    running: root.activityPulse && root.agents.length > 0
+    running: root.activityPulse && root.visibleAgents.length > 0
     triggeredOnStart: true
     onTriggered: if (!activityReader.running) activityReader.running = true
     onRunningChanged: if (!running) root.busyIds = []
@@ -274,8 +290,8 @@ Panel {
       if (nudger.running) return
       var now = Date.now()
       var cmd = ["omarchy-agent-usage-update", "--limits-only"]
-      for (var i = 0; i < root.agents.length; i++) {
-        var id = String(root.agents[i].id)
+      for (var i = 0; i < root.visibleAgents.length; i++) {
+        var id = String(root.visibleAgents[i].id)
         if (!/^[a-z][a-z0-9-]{0,23}$/.test(id) || (id === "openrouter" && root.openrouterLive)) continue
         var gap = Math.max(root.nudgeMin, root.providerFloorMin[id] || 1) * 60000
         // Due once its full gap has passed (a few seconds' slack for timing),
@@ -398,7 +414,7 @@ Panel {
     onTriggered: root.refresh()
   }
 
-  visible: agents.length > 0 || todayTokens > 0
+  visible: visibleAgents.length > 0 || todayTokens > 0
   implicitWidth: vertical ? barSize : row.implicitWidth + 4
   implicitHeight: vertical ? row.implicitHeight + 4 : barSize
 
@@ -406,11 +422,11 @@ Panel {
     id: row
     anchors.centerIn: parent
     flow: root.vertical ? Grid.TopToBottom : Grid.LeftToRight
-    columns: root.vertical ? 1 : Math.max(1, root.agents.length + (todayItem.visible ? 1 : 0))
+    columns: root.vertical ? 1 : Math.max(1, root.visibleAgents.length + (todayItem.visible ? 1 : 0))
     spacing: 0
 
     Repeater {
-      model: root.agents
+      model: root.visibleAgents
 
       // Each agent is its own bar button, padded so there are no dead gaps
       // between them. WidgetButton registers with the bar, which is the only
@@ -708,6 +724,51 @@ Panel {
           options: root.frequencies
           current: root.updateFrequency
           onChosen: function(value) { root.saveSetting("updateFrequency", value, false) }
+        }
+
+        // Which providers appear in the bar; lit = shown.
+        Column {
+          width: parent.width
+          spacing: Style.space(8)
+          visible: root.agents.length > 0
+
+          PanelSectionHeader {
+            text: "Show in bar"
+            foreground: root.fg
+            fontFamily: root.font
+          }
+
+          Flow {
+            width: parent.width
+            spacing: Style.space(6)
+
+            Repeater {
+              model: root.agents
+
+              Button {
+                required property var modelData
+                readonly property bool shown: root.hiddenAgents.indexOf(String(modelData.id)) === -1
+                width: (parent.width - Style.space(6) * 3) / 4
+                text: root.badge(modelData)
+                fontSize: Style.font.bodySmall
+                foreground: root.fg
+                fontFamily: root.font
+                bordered: true
+                active: shown
+                onClicked: root.setHidden(String(modelData.id), shown)
+              }
+            }
+          }
+        }
+
+        Button {
+          width: parent.width
+          text: "Providers & keys…"
+          fontSize: Style.font.bodySmall
+          foreground: root.fg
+          fontFamily: root.font
+          bordered: true
+          onClicked: { root.close(); root.openProviders() }
         }
 
         Row {

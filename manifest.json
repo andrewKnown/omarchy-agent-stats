@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.andrewknown.agent-stats",
   "name": "Omarchy Agent Stats",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "author": "andrewKnown",
   "license": "MIT",
   "description": "Per-agent rate-limit meters, prepaid balances (OpenRouter) and today's token total in the bar, built on Omarchy's own Agents usage data. Click an agent to open it in a terminal.",
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Agent Stats",
-    "description": "Two thin meters per subscription (session over weekly), prepaid balances such as OpenRouter's, and today's total tokens, with optional rings when a limit or balance runs low. Click an agent to launch it, right click for a menu, middle click to refresh.",
+    "description": "Two thin meters per subscription (session over weekly), prepaid balances such as OpenRouter's, Claude extra usage, and today's total tokens, with optional low-usage rings. Click an agent to launch it, right click for a menu (providers & keys, show/hide, update frequency, \u2026), middle click to refresh.",
     "category": "AI",
     "allowMultiple": false,
     "defaultSection": "right",
@@ -30,7 +30,8 @@
       "openrouterLive": false,
       "claudeExtra": false,
       "extraText": "Left",
-      "updateFrequency": "Off"
+      "updateFrequency": "Off",
+      "hiddenAgents": ""
     },
     "schema": [
       {
@@ -151,6 +152,13 @@
         ],
         "defaultValue": "Left",
         "description": "While on extra usage: the credit left this month as $ and % (Left), or what has been spent (Spent)."
+      },
+      {
+        "key": "hiddenAgents",
+        "type": "string",
+        "label": "Providers hidden from the bar",
+        "defaultValue": "",
+        "description": "Comma-separated agent ids to leave out of the bar, e.g. grok,kimi. Toggle them from the menu's Show in bar row."
       }
     ]
   }
