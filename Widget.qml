@@ -53,7 +53,14 @@ Panel {
     return !!agent.prepaid && lowBalanceAt > 0 && agent.prepaid.remaining !== null
       && agent.prepaid.remaining !== undefined && Number(agent.prepaid.remaining) <= lowBalanceAt
   }
-  function isLow(agent) { return lowAlert !== "Off" && (limitLow(agent) || balanceLow(agent)) }
+  // On extra usage the plan limit is already spent, so "low" means the extra
+  // usage credit left this month, by the same % threshold.
+  function isLow(agent) {
+    if (lowAlert === "Off") return false
+    if (balanceLow(agent)) return true
+    if (onExtra(agent) && extraLeftPct(agent.extra) !== null) return extraLow(agent)
+    return limitLow(agent)
+  }
 
   readonly property string prepaidText: {
     var v = String(setting("prepaidText", "Balance"))
@@ -74,6 +81,23 @@ Panel {
     for (var i = 0; i < full.length; i++)
       if (full[i].resetsAt && (!latest || Date.parse(full[i].resetsAt) > Date.parse(latest))) latest = full[i].resetsAt
     return latest
+  }
+  readonly property string extraText: String(setting("extraText", "Left")) === "Spent" ? "Spent" : "Left"
+  function extraLeft(x) {
+    return x && x.limit && x.used !== undefined && x.used !== null ? Math.max(0, Number(x.limit) - Number(x.used)) : null
+  }
+  function extraLeftPct(x) {
+    var left = extraLeft(x)
+    return left === null ? null : Math.round(100 * left / Number(x.limit))
+  }
+  function extraLow(agent) {
+    var pct = extraLeftPct(agent.extra)
+    return pct !== null && pct <= lowAlertAt
+  }
+  function extraLabel(x) {
+    if (extraText === "Left" && extraLeft(x) !== null)
+      return money(extraLeft(x), x.currency) + " " + extraLeftPct(x) + "%"
+    return money(x.used, x.currency)
   }
   function onExtra(agent) {
     return !!agent.extra && agent.extra.enabled === true && agent.extra.reached !== true && fullLimits(agent).length > 0
@@ -260,9 +284,13 @@ Panel {
     if (a.liveError) lines.push("Live check: " + a.liveError)
     var x = a.extra
     if (x && x.used !== undefined) {
-      lines.push("Extra usage: " + money(x.used, x.currency) + (x.limit ? " of " + money(x.limit, x.currency)
-        + " (" + Math.round(100 * x.used / x.limit) + "%)" : "") + " this month"
-        + (x.enabled ? "" : " · off") + (x.reached ? " · limit reached" : "") + (x.stale ? " · stale" : ""))
+      var flags = (x.enabled ? "" : " · off") + (x.reached ? " · limit reached" : "") + (x.stale ? " · stale" : "")
+      if (extraLeft(x) !== null) {
+        lines.push("Extra usage left: " + money(extraLeft(x), x.currency) + " (" + extraLeftPct(x) + "%)" + flags)
+        lines.push("Spent this month: " + money(x.used, x.currency) + " of " + money(x.limit, x.currency))
+      } else {
+        lines.push("Extra usage this month: " + money(x.used, x.currency) + " (no monthly limit)" + flags)
+      }
     }
     if (x && x.error) lines.push("Extra usage check: " + x.error)
     if (fullLimits(a).length > 0) {
@@ -452,8 +480,8 @@ Panel {
             visible: !!agentItem.modelData.prepaid || extraShown
             textFormat: Text.PlainText
             text: agentItem.modelData.prepaid ? root.prepaidLabel(agentItem.modelData.prepaid)
-              : extraShown ? root.money(agentItem.modelData.extra.used, agentItem.modelData.extra.currency) : ""
-            color: root.balanceLow(agentItem.modelData) ? root.hot : root.fg
+              : extraShown ? root.extraLabel(agentItem.modelData.extra) : ""
+            color: root.balanceLow(agentItem.modelData) || (extraShown && root.extraLow(agentItem.modelData)) ? root.hot : root.fg
             font.family: root.font
             font.pixelSize: 11
             font.bold: true
@@ -609,6 +637,14 @@ Panel {
           options: ["Off", "On"]
           current: root.claudeExtra ? "On" : "Off"
           onChosen: function(value) { root.saveSetting("claudeExtra", value === "On" ? "true" : "false", true) }
+        }
+
+        MenuChoice {
+          visible: root.claudeExtra
+          title: "Extra usage shows"
+          options: ["Left", "Spent"]
+          current: root.extraText
+          onChosen: function(value) { root.saveSetting("extraText", value, false) }
         }
 
         Row {

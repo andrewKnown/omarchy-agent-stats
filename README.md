@@ -84,10 +84,12 @@ Spend can come from two places:
 
 When a Claude plan limit is used up, an account with extra usage turned on
 keeps working on pay-as-you-go credits. With `claudeExtra` on (off by
-default), the widget shows that month's extra-usage spend: on hover always
-("Extra usage: $27.26 of $60.00 (45%) this month"), and next to Claude's
-meters while a plan limit is at 100%, with "on extra usage until …" in the
-tooltip. Without extra usage, the tooltip says when the agent is blocked
+default), the widget shows that month's extra-usage credit: on hover always
+("Extra usage left: $32.74 (55%)", then what has been spent of the monthly
+limit), and next to Claude's meters while a plan limit is at 100% (`$32.74 55%`,
+or the amount spent with `extraText: Spent`), with "on extra usage until …" in
+the tooltip. While on extra usage the low usage ring follows the credit left
+(the same `lowAlertAt` %) instead of the used-up plan limit. Without extra usage, the tooltip says when the agent is blocked
 until instead.
 
 Omarchy doesn't record this, so the widget asks Anthropic itself: the same
@@ -131,6 +133,7 @@ Set these on the widget's entry in `~/.config/omarchy/shell.json`, or with
 | `lowBalanceAt` | `5` | Dollars of balance at or below which a prepaid agent gets the ring; `0` turns it off |
 | `openrouterLive` | `false` | Ask openrouter.ai directly for exact spend and balance (see above) |
 | `claudeExtra` | `false` | Ask Anthropic for Claude's extra-usage spend this month (see above) |
+| `extraText` | `Left` | While on extra usage, show the credit `Left` ($ and %) or the amount `Spent` |
 | `warnAt` | `80` | Percentage at which a meter turns urgent |
 | `refreshIntervalSec` | `60` | How often the local usage files are re-read |
 

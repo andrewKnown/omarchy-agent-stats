@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.andrewknown.agent-stats",
   "name": "Omarchy Agent Stats",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": "andrewKnown",
   "license": "MIT",
   "description": "Per-agent rate-limit meters, prepaid balances (OpenRouter) and today's token total in the bar, built on Omarchy's own Agents usage data. Click an agent to open it in a terminal.",
@@ -28,7 +28,8 @@
       "prepaidText": "Balance",
       "lowBalanceAt": 5,
       "openrouterLive": false,
-      "claudeExtra": false
+      "claudeExtra": false,
+      "extraText": "Left"
     },
     "schema": [
       {
@@ -123,6 +124,17 @@
         "label": "Check Claude extra usage",
         "defaultValue": false,
         "description": "Asks Anthropic's usage endpoint (the one Claude Code's /usage reads) every 5 minutes for this month's extra usage, using the sign-in Claude Code keeps in ~/.claude/.credentials.json. Shows the spend on hover, and in the bar while a plan limit is used up."
+      },
+      {
+        "key": "extraText",
+        "type": "enum",
+        "label": "Claude extra usage shows",
+        "options": [
+          "Left",
+          "Spent"
+        ],
+        "defaultValue": "Left",
+        "description": "While on extra usage: the credit left this month as $ and % (Left), or what has been spent (Spent)."
       }
     ]
   }
