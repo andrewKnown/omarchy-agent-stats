@@ -172,6 +172,11 @@ def main():
             "stale": record.get("limitsStale") is True,
             "limits": limits,
         }
+        # When Omarchy last asked the provider, so the widget's own refreshes
+        # count Omarchy's checks instead of piling on top of them.
+        checked = _common.stamp_seconds(record.get("limitsFetchedAt"))
+        if checked:
+            entry["checkedAt"] = round(checked)
         if agent_id == "openrouter" and live_openrouter:
             openrouter_record = (agent_id, agent_name, record.get("limitsStale") is True, limits, balance)
             continue

@@ -277,9 +277,13 @@ Panel {
   readonly property int nudgeMin: maxFrequency ? 1 : updateFrequency === "Off" ? 0 : parseInt(updateFrequency)
   // Providers whose limits can't be asked for as often as a minute, and the
   // shortest gap (minutes) they tolerate; used by Max.
-  readonly property var providerFloorMin: ({ claude: 3 })
+  // Claude: Omarchy documents 3 minutes, but measured, Anthropic refuses
+  // checks that often once Omarchy's own (every 3 min near a limit, plus its
+  // regular run) are counted, so 5 is the shortest that gets answered.
+  readonly property var providerFloorMin: ({ claude: 5 })
   property var lastNudge: ({})
-  readonly property int openrouterAgeSec: nudgeMin > 0 && !maxFrequency ? nudgeMin * 60 : 55
+  // Max: 30 s, the floor remote.py keeps for OpenRouter; Off: about a minute.
+  readonly property int openrouterAgeSec: maxFrequency ? 30 : nudgeMin > 0 ? nudgeMin * 60 : 55
   // Never under 5 minutes: shares Anthropic's rate limit with Omarchy's checks.
   readonly property int claudeAgeSec: Math.max(300, nudgeMin > 0 && !maxFrequency ? nudgeMin * 60 : 300)
   readonly property int geminiAgeSec: maxFrequency ? 60 : nudgeMin > 0 ? nudgeMin * 60 : 300
@@ -300,11 +304,19 @@ Panel {
     Process {
       id: proc
       command: ["python3", "-I", root.remoteScript].concat(check.args)
-      onExited: root.refresh()
+      // 75: put off to keep clear of Omarchy's own Claude check; retry soon.
+      onExited: function(code) { if (code === 75) retrySoon.restart(); else root.refresh() }
     }
-    // A little past the age, so the check is due when it fires.
     Timer {
-      interval: (check.ageSec + 10) * 1000
+      id: retrySoon
+      interval: 30000
+      onTriggered: check.run()
+    }
+    // Asks at least once a minute whether the check is due (remote.py skips
+    // it until it is), so a long interval isn't stretched by up to a whole
+    // extra round when the timer and the last answer fall out of step.
+    Timer {
+      interval: (Math.min(check.ageSec, 60) + 3) * 1000
       repeat: true
       running: check.enabled
       triggeredOnStart: true
@@ -337,26 +349,31 @@ Panel {
     onExited: root.refresh()
   }
   Timer {
-    // Checks every 30 seconds which agents are due, so each keeps its own
-    // pace however early or late the shell's timers fire.
-    interval: 30000
+    // Checks every 10 seconds which agents are due, so each keeps its own
+    // pace (a 1-minute agent refreshes every 60-70 s) however early or late
+    // the shell's timers fire.
+    interval: 10000
     repeat: true
     running: root.nudgeMin > 0
     onTriggered: {
       if (nudger.running) return
       var now = Date.now()
-      var cmd = ["omarchy-agent-usage-update", "--limits-only"]
+      // A full refresh, not --limits-only: that one reuses the token scan for
+      // up to 15 minutes, which left Σ tokens behind the meters.
+      var cmd = ["omarchy-agent-usage-update"]
       for (var i = 0; i < root.visibleAgents.length; i++) {
         var id = String(root.visibleAgents[i].id)
         if (!/^[a-z][a-z0-9-]{0,23}$/.test(id) || (id === "openrouter" && root.openrouterLive) || id === "gemini-api") continue
         var gap = Math.max(root.nudgeMin, root.providerFloorMin[id] || 1) * 60000
-        // Due once its full gap has passed (a few seconds' slack for timing),
-        // so Claude is never asked more often than Anthropic allows.
-        if (now - (root.lastNudge[id] || 0) < gap - 3000) continue
+        // Due once its full gap has passed since the last check by either this
+        // widget or Omarchy itself (a few seconds' slack for timing), so Claude
+        // is never asked more often than Anthropic allows.
+        var last = Math.max(root.lastNudge[id] || 0, (Number(root.visibleAgents[i].checkedAt) || 0) * 1000)
+        if (now - last < gap - 3000) continue
         root.lastNudge[id] = now
         cmd.push(id)
       }
-      if (cmd.length > 2) { nudger.command = cmd; nudger.running = true }
+      if (cmd.length > 1) { nudger.command = cmd; nudger.running = true }
     }
   }
 

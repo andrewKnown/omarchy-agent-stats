@@ -66,6 +66,11 @@ class Records(unittest.TestCase):
         self.assertEqual([t["name"] for t in out["todayByAgent"]],
                          ["Antigravity", "Claude Code", "Codex", "Grok", "Grok Bot", "OpenRouter"])
 
+    def test_reports_when_omarchy_last_checked(self):
+        with Sandbox() as box:
+            box.write_record("codex", {"limits": [{"label": "5h", "percent": 0.2}], "limitsFetchedAt": 1795680000000})
+            self.assertEqual(run_read()["agents"][0]["checkedAt"], 1795680000)
+
     def test_broken_records_are_skipped(self):
         with Sandbox() as box:
             with open(box.usage + "/bad.json", "w") as fh:

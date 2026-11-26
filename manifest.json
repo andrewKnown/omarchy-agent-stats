@@ -57,7 +57,7 @@
           "15m"
         ],
         "defaultValue": "Off",
-        "description": "Best effort. Off follows Omarchy's own schedule (limits every 15 minutes by default). Max is the shortest interval each provider allows: Claude's limits every 3 minutes and its extra usage every 5 (Anthropic refuses faster), other agents' limits and OpenRouter every minute. An interval applies to all of them. Limits are refreshed through Omarchy's own updater (omarchy agent usage-update --limits-only)."
+        "description": "Best effort. Off follows Omarchy's own schedule (15 minutes by default). Max is the shortest interval each source allows: Claude's limits and extra usage every 5 minutes (Anthropic refuses more often), other agents every minute, OpenRouter every 30 s, Gemini every minute. An interval applies to all of them. Agents are refreshed through Omarchy's own updater (omarchy agent usage-update)."
       },
       {
         "key": "warnAt",

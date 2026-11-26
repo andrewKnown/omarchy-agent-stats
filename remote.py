@@ -160,7 +160,7 @@ def openrouter_live(cache_path):
         fetched = float(cached.get("fetchedAt") or 0)
     except (TypeError, ValueError):
         fetched = 0
-    if cached.get("ok") and time.time() - fetched < age_arg("openrouter-age", OPENROUTER_MIN_AGE, 30):
+    if cached.get("ok") and time.time() - fetched < still_fresh(age_arg("openrouter-age", OPENROUTER_MIN_AGE, 30)):
         return cached
     result, errors = {}, []
     # With a management key, spend is the whole account's: every key summed.
@@ -227,6 +227,14 @@ def openrouter_live(cache_path):
     result.update(ok=True, stale=bool(errors), error="; ".join(errors)[:80], fetchedAt=time.time())
     save_spend(cache_path, result)
     return result
+
+
+def still_fresh(age):
+    """How long an answer stays fresh for a check due every `age` seconds. An
+    answer is stamped when its requests finish, seconds after the check began,
+    so without some slack the next timer finds it a little too new and skips
+    a whole round."""
+    return age - min(20, age * 0.2)
 
 
 def age_arg(name, default, floor):
@@ -342,7 +350,7 @@ def gemini_usage(projects, cache_path):
         fetched = 0
     today = datetime.now().astimezone().date().isoformat()
     same = cached.get("projects") == projects and cached.get("day") == today
-    if same and cached.get("ok") and time.time() - fetched < age_arg("gemini-age", GEMINI_MIN_AGE, 60):
+    if same and cached.get("ok") and time.time() - fetched < still_fresh(age_arg("gemini-age", GEMINI_MIN_AGE, 60)):
         return cached
     token, error = gcloud_token()
     if token:
@@ -451,7 +459,7 @@ def claude_extra(cache_path):
         fetched = float(cached.get("fetchedAt") or 0)
     except (TypeError, ValueError):
         fetched = 0
-    if cached.get("ok") and time.time() - fetched < age_arg("claude-age", CLAUDE_MIN_AGE, CLAUDE_MIN_AGE):
+    if cached.get("ok") and time.time() - fetched < still_fresh(age_arg("claude-age", CLAUDE_MIN_AGE, CLAUDE_MIN_AGE)):
         return cached
     # After a 429, wait as long as Anthropic asked before trying again.
     try:
@@ -460,6 +468,12 @@ def claude_extra(cache_path):
         retry_at = 0
     if retry_at > time.time():
         return cached
+    # Space this out from Omarchy's own Claude checks, which ask the same
+    # endpoint and share its rate limit: skip a run within a minute of one.
+    omarchy = load_spend(os.path.join(os.path.dirname(state_dir()), "omarchy", "agents", "usage", "claude.json"))
+    omarchy_checked = _common.stamp_seconds(omarchy.get("limitsFetchedAt"))
+    if 0 < time.time() - omarchy_checked < 60 and cached.get("ok"):
+        return dict(cached, _deferred=True)
     retry = {}
     expires = oauth.get("expiresAt")
     if isinstance(expires, (int, float)) and not isinstance(expires, bool) and expires / 1000 < time.time():
@@ -524,6 +538,10 @@ def main():
     # can say so rather than wait for a check that never comes.
     if result is None:
         result = {"ok": False, "missing": True}
+    # Put off (Claude, right after one of Omarchy's checks): leave the cache
+    # as it is and exit 75 so the widget tries again shortly.
+    if result.pop("_deferred", False):
+        return 75
     result["checkedAt"] = time.time()
     save_spend(path, result)
     return 0

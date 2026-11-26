@@ -19,6 +19,19 @@ def money(value):
     return parsed if math.isfinite(parsed) and 0 <= parsed < 10**9 else None
 
 
+def stamp_seconds(value):
+    """A Unix time in seconds or milliseconds as seconds, or 0."""
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(number) or number <= 0:
+        return 0.0
+    return number / 1000 if number > 10**11 else number
+
+
 def state_dir():
     """$XDG_STATE_HOME/omarchy-agent-stats, where this plugin keeps its files."""
     base = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")

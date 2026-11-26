@@ -120,25 +120,38 @@ input/output tokens per model on hover. Click it to open AI Studio's usage page.
 Omarchy's Agents plugin refreshes the usage records on its own schedule, every
 15 minutes by default, and the widget re-reads them every `refreshIntervalSec`
 (60 s). **Update frequency** (`updateFrequency`, in the menu) asks for fresher
-numbers, best effort:
+numbers, best effort. `Max` is the shortest interval each source allows:
 
-| Choice | Subscription limits | Claude extra usage | OpenRouter (live) |
+| Source | `Off` (default) | `Max` | `3m` … `15m` |
 |---|---|---|---|
-| `Off` (default) | Omarchy's schedule | every 5 min | every minute |
-| `Max` | Claude every 3 min, other agents every minute | every 5 min | every minute |
-| `3m`, `5m`, `10m`, `15m` | that interval | that interval | that interval |
+| Claude limits and tokens | Omarchy's schedule | every 5 min | that interval, at least 5 min |
+| Other agents' limits and tokens (Codex, Grok, Antigravity, Cursor, …) | Omarchy's schedule | every minute | that interval |
+| Claude extra usage | every 5 min | every 5 min | that interval, at least 5 min |
+| OpenRouter (live) | every minute | every 30 s | that interval |
+| Gemini API | every 5 min | every minute | that interval |
+| Reading it all into the bar | every 60 s | every 30 s | every 60 s |
 
-`Max` is the shortest interval each provider allows. Anthropic refuses usage
-checks more often than about every 3 minutes, the floor Omarchy itself keeps;
-OpenAI (Codex) and xAI (Grok) publish no limit, so a minute is best effort. With
-`Max` the records are also re-read every 30 seconds.
+Why those floors:
 
-Limits are refreshed by running Omarchy's own `omarchy agent usage-update
---limits-only` for just the agents shown, the cheap refresh the Agents panel
-does when it opens; a collector may still reuse an answer from the last few
-seconds. Today's token total (Σ) follows Omarchy's full runs, which rescan
-session files; shorten those with `omarchy bar set omarchy.agents
-refreshIntervalSec 300 --json`. Middle-click forces a full refresh at any time.
+- **Claude, 5 min:** Anthropic rate-limits its usage endpoint readily. Omarchy
+  documents 3 minutes, but measured alongside Omarchy's own Claude checks
+  (every 3 minutes near a limit, plus its regular run) checks that often were
+  refused, and Omarchy then quietly keeps showing the last numbers. Omarchy's
+  own checks count towards the 5 minutes, so the widget rarely adds one. Extra
+  usage is asked of the same endpoint: every 5 minutes, at least a minute
+  after Omarchy's last Claude check, waiting as long as Anthropic asks after a
+  "too many requests".
+- **Other agents, 1 min:** Omarchy's collectors will ask again after 15 s, but
+  OpenAI, xAI, Google and Cursor publish no limit for these endpoints, so a
+  minute is a safe best effort.
+- **OpenRouter, 30 s:** the floor this plugin keeps; OpenRouter publishes no
+  stricter limit and its spend figures are live.
+- **Gemini, 1 min:** Google Cloud Monitoring records these metrics per minute.
+
+Agents are refreshed with Omarchy's own `omarchy agent usage-update` for just
+the agents shown: a full refresh (limits and today's tokens), since the
+`--limits-only` kind reuses the token scan for up to 15 minutes. Middle-click
+forces a full refresh at any time.
 
 ## Prepaid balances (OpenRouter)
 

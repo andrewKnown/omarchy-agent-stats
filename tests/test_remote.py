@@ -74,6 +74,18 @@ class ClaudeExtra(unittest.TestCase):
             self.assertGreater(first["retryAt"], time.time() + 100)
             self.assertEqual(opener.call_count, 1)
 
+    def test_waits_a_minute_after_omarchys_own_check(self):
+        with Sandbox() as box:
+            self.sign_in()
+            box.write_record("claude", {"limits": [], "limitsFetchedAt": time.time() * 1000 - 20000})
+            r = remote()
+            cache = os.path.join(box.plugin_state, "claude-extra.json")
+            r.save_spend(cache, {"ok": True, "used": 1, "fetchedAt": time.time() - 900})
+            with mock.patch.object(r.urllib.request, "urlopen") as opener:
+                result = r.claude_extra(cache)
+            opener.assert_not_called()
+            self.assertTrue(result.get("_deferred"))
+
     def test_lapsed_token_is_not_sent(self):
         with Sandbox() as box:
             self.sign_in(expires_ms=1000)
@@ -82,6 +94,14 @@ class ClaudeExtra(unittest.TestCase):
                 result = r.claude_extra(os.path.join(box.plugin_state, "claude-extra.json"))
             opener.assert_not_called()
             self.assertIn("lapsed", result["error"])
+
+
+class Freshness(unittest.TestCase):
+    def test_answers_are_due_slightly_early(self):
+        r = remote()
+        self.assertEqual(r.still_fresh(30), 24)
+        self.assertEqual(r.still_fresh(60), 48)
+        self.assertEqual(r.still_fresh(300), 280)
 
 
 class OpenRouter(unittest.TestCase):
