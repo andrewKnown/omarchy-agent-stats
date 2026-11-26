@@ -155,11 +155,14 @@ Panel {
   readonly property string logoDir: (Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy") + "/shell/plugins/agents/assets/"
   readonly property bool lightBar: (0.299 * fg.r + 0.587 * fg.g + 0.114 * fg.b) < 0.5
   function logoUrl(id) {
-    if (!/^[a-z0-9-]{1,24}$/.test(String(id)) || noLogo[id]) return ""
+    if (!/^[a-z0-9-]{1,24}$/.test(String(id))) return ""
+    // Entries this plugin adds itself carry their own logo in assets/.
+    if (ownLogos[id]) return Qt.resolvedUrl("assets/" + id + (lightBar ? "-light" : "") + ".svg")
     return "file://" + logoDir + id + (lightBar && lightLogos[id] ? "-light" : "") + ".svg"
   }
-  // Entries this plugin adds itself, with no logo in Omarchy's set.
-  readonly property var noLogo: ({ "gemini-api": true })
+  // Entries this plugin adds itself, with a logo bundled in assets/ (Simple
+  // Icons, CC0) since Omarchy's set has none for them.
+  readonly property var ownLogos: ({ "gemini-api": true })
   // Agents whose logo has a separate light-bar version.
   readonly property var lightLogos: ({ agy: true, codex: true, copilot: true, cursor: true, devin: true,
     grokbot: true, grok: true, hermes: true, kimi: true, minimax: true, muse: true, ollama: true,

@@ -73,7 +73,7 @@ Keys are never shown in full or written anywhere else.
 ## Google Gemini API (AI Studio)
 
 Pick **Gemini API (AI Studio)** in **Providers & keys…** to show Gemini API
-usage as `GM` in the bar: today's tokens, with requests (and failures) and
+usage in the bar (its logo, or `GM` with letter badges): today's tokens, with requests (and failures) and
 input/output tokens per model on hover. Click it to open AI Studio's usage page.
 
 - It needs the Google Cloud CLI (`gcloud`), signed in to the Google account your
@@ -241,3 +241,11 @@ omarchy plugin remove io.github.andrewknown.agent-stats
 ## License
 
 MIT
+
+## Credits
+
+The Gemini logo in `assets/` is the Google Gemini icon from
+[Simple Icons](https://simpleicons.org) (v14.0.0, CC0 1.0), recoloured to match
+the bar. Gemini is a trademark of Google LLC, used here only to identify the
+service. Every other logo is read from Omarchy's own install.
+
