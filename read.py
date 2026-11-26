@@ -233,7 +233,7 @@ def openrouter_live(cache_path):
         fetched = float(cached.get("fetchedAt") or 0)
     except (TypeError, ValueError):
         fetched = 0
-    if cached.get("ok") and time.time() - fetched < OPENROUTER_MIN_AGE:
+    if cached.get("ok") and time.time() - fetched < age_arg("openrouter-age", OPENROUTER_MIN_AGE, 30):
         return cached
     result, errors = {}, []
     # With a management key, spend is the whole account's: every key summed.
@@ -295,19 +295,20 @@ def openrouter_live(cache_path):
     return result
 
 
-def every_seconds():
-    """The widget's chosen update interval (--every=SECONDS), else 0."""
+def age_arg(name, default, floor):
+    """A --NAME=SECONDS option from the widget's update frequency, kept within
+    [floor, 3600]; default when absent."""
     for arg in sys.argv[1:]:
-        if arg.startswith("--every="):
+        if arg.startswith("--" + name + "="):
             try:
-                return max(0, min(3600, int(arg[8:])))
+                return max(floor, min(3600, int(arg.split("=", 1)[1])))
             except ValueError:
-                return 0
-    return 0
+                break
+    return default
 
 
 CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
-CLAUDE_MIN_AGE = 300  # seconds; Anthropic refuses this endpoint if asked too often
+CLAUDE_MIN_AGE = 300  # seconds by default; never below 180, Anthropic refuses faster probes
 
 
 def minor_amount(obj):
@@ -362,7 +363,7 @@ def claude_extra(cache_path):
         fetched = float(cached.get("fetchedAt") or 0)
     except (TypeError, ValueError):
         fetched = 0
-    if cached.get("ok") and time.time() - fetched < max(CLAUDE_MIN_AGE, every_seconds()):
+    if cached.get("ok") and time.time() - fetched < age_arg("claude-age", CLAUDE_MIN_AGE, 180):
         return cached
     expires = oauth.get("expiresAt")
     if isinstance(expires, (int, float)) and not isinstance(expires, bool) and expires / 1000 < time.time():

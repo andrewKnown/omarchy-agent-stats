@@ -213,7 +213,7 @@ Panel {
       var cmd = ["python3", "-I", root.scriptPath]
       if (root.openrouterLive) cmd.push("--openrouter-live")
       if (root.claudeExtra) cmd.push("--claude-extra")
-      if (root.updateEveryMin > 0) cmd.push("--every=" + root.updateEveryMin * 60)
+      cmd.push("--openrouter-age=" + root.openrouterAgeSec, "--claude-age=" + root.claudeAgeSec)
       return cmd
     }
     stdout: StdioCollector {
@@ -233,37 +233,63 @@ Panel {
     }
   }
 
-  // Best-effort faster updates: Omarchy's Agents plugin refreshes the usage
-  // records on its own schedule (every 15 minutes by default). With
-  // updateEveryMin set, this widget also asks Omarchy's own updater for fresh
-  // limits (--limits-only, the cheap kind the Agents panel runs when opened)
-  // for just the agents shown. Never more often than every 3 minutes, the
-  // pace Omarchy itself keeps to, because Anthropic refuses faster probes.
-  readonly property int updateEveryMin: {
-    var n = Math.round(Number(setting("updateEveryMin", 0)) || 0)
-    return n <= 0 ? 0 : Math.max(3, Math.min(60, n))
+  // Update frequency, one setting for every source (best effort):
+  //  Off  - Omarchy's own schedule for limits and tokens; OpenRouter live
+  //         every minute, Claude extra usage every 5 minutes.
+  //  Max  - the shortest interval each provider allows, per provider:
+  //         Claude every 3 minutes (Anthropic refuses faster probes; Omarchy
+  //         keeps the same floor), Claude extra usage every 3, every other
+  //         agent's limits and OpenRouter every minute, and the records
+  //         re-read every 30 seconds.
+  //  3m.. - every source at that interval.
+  // Limits are refreshed by running Omarchy's own updater with --limits-only
+  // for just the agents shown, the cheap refresh its Agents panel does when
+  // opened. Today's token total still follows Omarchy's own full runs.
+  readonly property var frequencies: ["Off", "Max", "3m", "5m", "10m", "15m"]
+  readonly property string updateFrequency: {
+    var v = String(setting("updateFrequency", "Off"))
+    return frequencies.indexOf(v) !== -1 ? v : "Off"
   }
+  readonly property bool maxFrequency: updateFrequency === "Max"
+  // Minutes between limit refreshes this widget asks for (0 = Omarchy's).
+  readonly property int nudgeMin: maxFrequency ? 1 : updateFrequency === "Off" ? 0 : parseInt(updateFrequency)
+  // Providers whose limits can't be asked for as often as a minute, and the
+  // shortest gap (minutes) they tolerate; used by Max.
+  readonly property var providerFloorMin: ({ claude: 3 })
+  property var lastNudge: ({})
+  readonly property int openrouterAgeSec: nudgeMin > 0 && !maxFrequency ? nudgeMin * 60 : 55
+  readonly property int claudeAgeSec: maxFrequency ? 180 : nudgeMin > 0 ? nudgeMin * 60 : 300
+  readonly property int readMs: maxFrequency ? 30000 : intervalMs
   Process {
     id: nudger
     onExited: root.refresh()
   }
   Timer {
-    interval: Math.max(3, root.updateEveryMin) * 60000
+    // Checks every 30 seconds which agents are due, so each keeps its own
+    // pace however early or late the shell's timers fire.
+    interval: 30000
     repeat: true
-    running: root.updateEveryMin > 0
+    running: root.nudgeMin > 0
     onTriggered: {
       if (nudger.running) return
+      var now = Date.now()
       var cmd = ["omarchy-agent-usage-update", "--limits-only"]
       for (var i = 0; i < root.agents.length; i++) {
         var id = String(root.agents[i].id)
-        if (/^[a-z][a-z0-9-]{0,23}$/.test(id) && !(id === "openrouter" && root.openrouterLive)) cmd.push(id)
+        if (!/^[a-z][a-z0-9-]{0,23}$/.test(id) || (id === "openrouter" && root.openrouterLive)) continue
+        var gap = Math.max(root.nudgeMin, root.providerFloorMin[id] || 1) * 60000
+        // Due once its full gap has passed (a few seconds' slack for timing),
+        // so Claude is never asked more often than Anthropic allows.
+        if (now - (root.lastNudge[id] || 0) < gap - 3000) continue
+        root.lastNudge[id] = now
+        cmd.push(id)
       }
       if (cmd.length > 2) { nudger.command = cmd; nudger.running = true }
     }
   }
 
   Timer {
-    interval: root.intervalMs
+    interval: root.readMs
     repeat: true
     running: true
     triggeredOnStart: true
@@ -678,10 +704,10 @@ Panel {
         }
 
         MenuChoice {
-          title: "Update usage every"
-          options: ["Off", "3m", "5m", "10m", "15m"]
-          current: root.updateEveryMin > 0 ? root.updateEveryMin + "m" : "Off"
-          onChosen: function(value) { root.saveSetting("updateEveryMin", value === "Off" ? "0" : parseInt(value), true) }
+          title: "Update frequency"
+          options: root.frequencies
+          current: root.updateFrequency
+          onChosen: function(value) { root.saveSetting("updateFrequency", value, false) }
         }
 
         Row {

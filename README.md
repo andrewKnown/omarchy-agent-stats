@@ -21,7 +21,7 @@ An agent whose limits couldn't be refreshed is shown faded. After the meters,
 The right-click menu switches the badge between letters and logos, turns the
 activity pulse on or off, sets the low usage alert and its threshold, sets what prepaid agents show,
 the low balance alert and live OpenRouter checks (shown once one is set up),
-turns the Claude extra-usage check on or off, sets how often usage updates, opens
+turns the Claude extra-usage check on or off, sets the update frequency, opens
 the Agents panel, and refreshes. Choices are
 saved to the widget's entry in `~/.config/omarchy/shell.json` through
 `omarchy bar set`. You can also toggle the menu from a keybinding or script:
@@ -40,22 +40,28 @@ files (plus `/proc` when the activity pulse is on).
 
 ## How fresh the numbers are
 
-The widget re-reads Omarchy's usage records every `refreshIntervalSec` (60 s),
-but Omarchy's Agents plugin only refreshes those records on its own schedule,
-every 15 minutes by default. Two ways to get fresher numbers:
+Omarchy's Agents plugin refreshes the usage records on its own schedule, every
+15 minutes by default, and the widget re-reads them every `refreshIntervalSec`
+(60 s). **Update frequency** (`updateFrequency`, in the menu) asks for fresher
+numbers, best effort:
 
-- **Update usage every** (`updateEveryMin`, in the menu). Best effort: the
-  widget also runs Omarchy's own `omarchy agent usage-update --limits-only` for
-  just the agents it shows, the cheap refresh the Agents panel does when it
-  opens. It never goes below 3 minutes, the pace Omarchy itself keeps to near
-  a limit, because Anthropic refuses faster probes; Omarchy's collectors may
-  still reuse a very recent answer. `0` (Off in the menu) leaves it to Omarchy.
-- Shorten Omarchy's own schedule: `omarchy bar set omarchy.agents
-  refreshIntervalSec 300 --json`.
+| Choice | Subscription limits | Claude extra usage | OpenRouter (live) |
+|---|---|---|---|
+| `Off` (default) | Omarchy's schedule | every 5 min | every minute |
+| `Max` | Claude every 3 min, other agents every minute | every 3 min | every minute |
+| `3m`, `5m`, `10m`, `15m` | that interval | that interval | that interval |
 
-Middle-click forces a full refresh at any time. Live OpenRouter checks run
-every minute; the Claude extra-usage check every 5 minutes, or every
-`updateEveryMin` if that's longer.
+`Max` is the shortest interval each provider allows. Anthropic refuses usage
+checks more often than about every 3 minutes, the floor Omarchy itself keeps;
+OpenAI (Codex) and xAI (Grok) publish no limit, so a minute is best effort. With
+`Max` the records are also re-read every 30 seconds.
+
+Limits are refreshed by running Omarchy's own `omarchy agent usage-update
+--limits-only` for just the agents shown, the cheap refresh the Agents panel
+does when it opens; a collector may still reuse an answer from the last few
+seconds. Today's token total (Σ) follows Omarchy's full runs, which rescan
+session files; shorten those with `omarchy bar set omarchy.agents
+refreshIntervalSec 300 --json`. Middle-click forces a full refresh at any time.
 
 ## Prepaid balances (OpenRouter)
 
@@ -154,7 +160,7 @@ Set these on the widget's entry in `~/.config/omarchy/shell.json`, or with
 | `claudeExtra` | `false` | Ask Anthropic for Claude's extra-usage spend this month (see above) |
 | `extraText` | `Left` | While on extra usage, show the credit `Left` ($ and %) or the amount `Spent` |
 | `warnAt` | `80` | Percentage at which a meter turns urgent |
-| `updateEveryMin` | `0` | Best effort: also ask Omarchy for fresh limits this often (3–60 minutes); `0` follows Omarchy's own schedule |
+| `updateFrequency` | `Off` | `Off`, `Max`, `3m`, `5m`, `10m` or `15m` (see "How fresh the numbers are") |
 | `refreshIntervalSec` | `60` | How often the local usage files are re-read |
 
 **Logos** are read from Omarchy's own install

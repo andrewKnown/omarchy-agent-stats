@@ -30,7 +30,7 @@
       "openrouterLive": false,
       "claudeExtra": false,
       "extraText": "Left",
-      "updateEveryMin": 0
+      "updateFrequency": "Off"
     },
     "schema": [
       {
@@ -43,14 +43,19 @@
         "defaultValue": 60
       },
       {
-        "key": "updateEveryMin",
-        "type": "integer",
-        "label": "Update usage every (minutes, 0 = Omarchy's schedule)",
-        "min": 0,
-        "max": 60,
-        "step": 1,
-        "defaultValue": 0,
-        "description": "Best effort. Omarchy's Agents plugin refreshes usage on its own schedule (15 minutes by default). Set this to also ask Omarchy's updater for fresh limits (omarchy agent usage-update --limits-only) for the agents shown, at most every 3 minutes."
+        "key": "updateFrequency",
+        "type": "enum",
+        "label": "Update frequency",
+        "options": [
+          "Off",
+          "Max",
+          "3m",
+          "5m",
+          "10m",
+          "15m"
+        ],
+        "defaultValue": "Off",
+        "description": "Best effort. Off follows Omarchy's own schedule (limits every 15 minutes by default). Max is the shortest interval each provider allows: Claude's limits and extra usage every 3 minutes (Anthropic refuses faster), other agents' limits and OpenRouter every minute. An interval applies to all of them. Limits are refreshed through Omarchy's own updater (omarchy agent usage-update --limits-only)."
       },
       {
         "key": "warnAt",
