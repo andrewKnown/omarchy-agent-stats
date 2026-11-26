@@ -166,7 +166,7 @@
         "type": "string",
         "label": "Google Cloud projects for Gemini API usage",
         "defaultValue": "",
-        "description": "Comma-separated project ids whose Gemini API (AI Studio) usage to show: requests and tokens today, from Google Cloud Monitoring with your gcloud sign-in. Pick them in Providers & keys. Empty = off."
+        "description": "Comma-separated project ids whose Gemini API (AI Studio) usage to show: requests and tokens today, from Google Cloud Monitoring with your gcloud sign-in. Pick them in Settings & providers. Empty = off."
       }
     ]
   }
