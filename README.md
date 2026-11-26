@@ -18,6 +18,16 @@ An agent whose limits couldn't be refreshed is shown faded. After the meters,
 | Right click | Open the menu | Open the menu |
 | Middle click | Refresh usage now | Refresh usage now |
 
+An agent opens through Omarchy's own `omarchy-agent` launcher, in the same
+terminal with the same flags and account as the `Super` launch; your default
+agent setting is never changed. Providers with no app of their own open their
+usage page instead (OpenRouter activity, AI Studio usage for Gemini, the Cursor
+dashboard for Grok Bot, DeepSeek's usage page), and an agent whose CLI isn't
+installed opens its page or else the Agents panel. While Cursor's sign-in is in
+`~/.config/cursor/auth.json` (the workaround for omacom/omarchy#19559), Cursor
+starts with the display hidden from it, so launching it from the bar doesn't
+move the sign-in back into the keyring and blank its usage and Grok Bot's.
+
 The right-click menu:
 
 - **Agent badge**: letters or logos. **Pulse while working**: on or off.
