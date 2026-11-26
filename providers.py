@@ -548,9 +548,10 @@ def main():
             name = str(rec.get("name") or agent_id)[:24]
             ready = bool(rec.get("limits") or rec.get("balance"))
             rows.append((not ready, name.lower(), agent_id, name, status(rec)))
+        # Alphabetical by name; ● and ○ still show which are set up.
         gemini_on = bool(widget_setting("geminiProjects", ""))
         rows.append((not gemini_on, "gemini api", "gemini-api", "Gemini API (AI Studio)", gemini_status()))
-        rows.sort()
+        rows.sort(key=lambda r: (r[1], r[2]))
         rows.insert(0, (False, "", "display", "Display & alerts", "rings, colours, what prepaid and extra usage show"))
         clear()
         mark = lambda r: "⚙" if r[2] == "display" else "●" if not r[0] else "○"

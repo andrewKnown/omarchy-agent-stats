@@ -54,6 +54,18 @@ class Records(unittest.TestCase):
         self.assertEqual([a["id"] for a in out["agents"]], ["claude", "codex"])
         self.assertEqual([l["percent"] for l in out["agents"][0]["limits"]], [60.0, 100.0])
 
+    def test_alphabetical_by_name(self):
+        with Sandbox() as box:
+            for agent_id, name in (("openrouter", "OpenRouter"), ("claude", "Claude Code"), ("agy", "Antigravity"),
+                                   ("grokbot", "Grok Bot"), ("grok", "Grok"), ("codex", "Codex")):
+                box.write_record(agent_id, {"name": name, "limits": [{"label": "W", "percent": 0.1}],
+                                            "todayTotalTokens": 5})
+            out = run_read()
+        self.assertEqual([a["name"] for a in out["agents"]],
+                         ["Antigravity", "Claude Code", "Codex", "Grok", "Grok Bot", "OpenRouter"])
+        self.assertEqual([t["name"] for t in out["todayByAgent"]],
+                         ["Antigravity", "Claude Code", "Codex", "Grok", "Grok Bot", "OpenRouter"])
+
     def test_broken_records_are_skipped(self):
         with Sandbox() as box:
             with open(box.usage + "/bad.json", "w") as fh:

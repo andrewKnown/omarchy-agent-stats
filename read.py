@@ -27,8 +27,7 @@ _spec.loader.exec_module(_common)
 text, money = _common.text, _common.money
 load_spend, save_spend = _common.load_json, _common.save_json
 
-ORDER = ["claude", "codex", "grok"]
-MAX_AGENTS = 8
+MAX_AGENTS = 16
 MAX_LIMITS = 4
 
 
@@ -259,13 +258,9 @@ def main():
     if spend_changed:
         save_spend(spend_path, spend)
 
-    # Subscriptions first (Claude, Codex, Grok, then the rest), prepaid last.
-    def rank(agent):
-        aid = agent["id"]
-        return ("prepaid" in agent, ORDER.index(aid) if aid in ORDER else len(ORDER), aid)
-
-    agents.sort(key=rank)
-    today.sort(key=lambda item: -item[1])
+    # Providers in alphabetical order by name, everywhere they're listed.
+    agents.sort(key=lambda agent: (agent["name"].lower(), agent["id"]))
+    today.sort(key=lambda item: item[0].lower())
     json.dump({
         "agents": agents[:MAX_AGENTS],
         "todayTokens": sum(t for _, t in today),

@@ -21,8 +21,8 @@ An agent whose limits couldn't be refreshed is shown faded. After the meters,
 An agent opens through Omarchy's own `omarchy-agent` launcher, in the same
 terminal with the same flags and account as the `Super` launch; your default
 agent setting is never changed. Providers with no app of their own open their
-usage page instead (OpenRouter activity, AI Studio usage for Gemini, the Cursor
-dashboard for Grok Bot, DeepSeek's usage page), and an agent whose CLI isn't
+usage page instead (DeepSeek's usage page, AI Studio usage for Gemini, the Cursor
+dashboard for Grok Bot, OpenRouter activity), and an agent whose CLI isn't
 installed opens its page or else the Agents panel. While Cursor's sign-in is in
 `~/.config/cursor/auth.json` (the workaround for omacom/omarchy#19559), Cursor
 starts with the display hidden from it, so launching it from the bar doesn't
@@ -66,8 +66,9 @@ with Omarchy's own Claude checks, and waits as long as Anthropic asks after a
 ## Providers and keys
 
 The widget shows every provider Omarchy's Agents plugin tracks that has limits
-or a balance (Claude, Codex, Grok, OpenRouter, Copilot, Cursor, Antigravity,
-DeepSeek, Kimi, Z.ai, Ollama Cloud and more, as you sign in to them).
+or a balance (Antigravity, Claude, Codex, Copilot, Cursor, DeepSeek, Grok, Grok
+Bot, Kimi, Ollama Cloud, OpenRouter, Z.ai and more, as you sign in to them),
+plus the Gemini API, in alphabetical order.
 
 **Settings & providers…** in the menu opens a small setup screen in Omarchy's
 floating terminal (`providers.py`). It lists every provider with what Omarchy
