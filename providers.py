@@ -47,6 +47,35 @@ KEY_PAGES = {
     "ollama": "ollama.com/settings/keys",
 }
 HAS_GUM = shutil.which("gum") is not None
+WIDGET_ID = "io.github.andrewknown.agent-stats"
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def reader():
+    """read.py from this plugin, for its Google Cloud helpers."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("agent_stats_read", os.path.join(HERE, "read.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def widget_setting(key, default=""):
+    shell = read_json(os.path.join(CONFIG, "omarchy", "shell.json"))
+    stack = [shell]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            if item.get("id") == WIDGET_ID:
+                return item.get(key, default)
+            stack.extend(item.values())
+        elif isinstance(item, list):
+            stack.extend(item)
+    return default
+
+
+def save_widget_setting(key, value):
+    subprocess.run(["omarchy-bar", "set", WIDGET_ID, key, value], stdout=subprocess.DEVNULL)
 
 
 # ------------------------------------------------------------------ ui bits
@@ -282,6 +311,131 @@ def manage_account(agent_id, name):
         pause()
 
 
+def choose_many(prompt, options, selected):
+    if HAS_GUM:
+        cmd = ["gum", "choose", "--no-limit", "--header", prompt]
+        if selected:
+            cmd.append("--selected=" + ",".join(selected))
+        result = subprocess.run(cmd + options, stdout=subprocess.PIPE, text=True)
+        return [line for line in result.stdout.splitlines() if line in options] if result.returncode == 0 else None
+    say(prompt + " (numbers separated by spaces)")
+    for i, option in enumerate(options, 1):
+        say(f"  {i}. {'[x]' if option in selected else '[ ]'} {option}")
+    try:
+        picked = input("> ").split()
+    except (EOFError, KeyboardInterrupt):
+        return None
+    return [options[int(n) - 1] for n in picked if n.isdigit() and 0 < int(n) <= len(options)]
+
+
+def gemini_status():
+    projects = [p for p in str(widget_setting("geminiProjects", "")).split(",") if p]
+    if not projects:
+        return "off"
+    cache = read_json(os.path.join(STATE, "omarchy-agent-stats", "gemini.json"))
+    if cache.get("ok"):
+        tokens = sum(c.get("in", 0) + c.get("out", 0) for c in (cache.get("models") or {}).values())
+        return "%d requests, %s tokens today · %d project(s)%s" % (
+            cache.get("requests", 0), f"{tokens:,}", len(projects), " · stale" if cache.get("stale") else "")
+    return "%d project(s), not checked yet" % len(projects)
+
+
+def find_gemini_projects():
+    """[(project, requests in the last 7 days)] for projects with the Gemini API on."""
+    from datetime import datetime, timedelta, timezone
+    r = reader()
+    token, error = r.gcloud_token()
+    if not token:
+        say("Google Cloud: " + error)
+        return None
+    gcloud = r.gcloud_path()
+    say("Listing your Google Cloud projects…")
+    listed = subprocess.run([gcloud, "projects", "list", "--format=value(projectId)"],
+                            capture_output=True, text=True, timeout=120).stdout.split()
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=7)
+    def requests(project):
+        try:
+            series = r.monitoring_series(project, token,
+                'metric.type="serviceruntime.googleapis.com/api/request_count" AND resource.type="consumed_api" '
+                'AND resource.labels.service="generativelanguage.googleapis.com"', start, end, [])
+            return project, int(sum(v for _, v in series))
+        except Exception:
+            return project, 0
+
+    from concurrent.futures import ThreadPoolExecutor
+    say(f"Checking {len(listed)} projects for Gemini API traffic in the last 7 days…")
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        found = [(p, n) for p, n in pool.map(requests, listed) if n]
+    return found
+
+
+def manage_gemini():
+    gcloud = reader().gcloud_path()
+    while True:
+        clear()
+        heading("Google Gemini API (AI Studio)")
+        say("Shows requests and tokens today per model from Google Cloud Monitoring, for the")
+        say("projects your AI Studio keys belong to. Google has no API for Gemini spend or")
+        say("prepay balance; see aistudio.google.com/spend for those.")
+        if not gcloud:
+            say("\nNeeds the Google Cloud CLI (gcloud). Install it, e.g.: omarchy pkg aur add google-cloud-cli")
+            pause()
+            return
+        account = subprocess.run([gcloud, "auth", "list", "--filter=status:ACTIVE", "--format=value(account)"],
+                                 capture_output=True, text=True, timeout=60).stdout.strip()
+        say("\nGoogle Cloud account: " + (account or "not signed in"))
+        say("Projects: " + (str(widget_setting("geminiProjects", "")) or "none"))
+        picked = choose("Gemini API: " + gemini_status(),
+                        ["Choose projects", "Sign in to Google Cloud", "Turn off", "Test", "Back"])
+        if picked in (None, "Back"):
+            return
+        if picked == "Sign in to Google Cloud":
+            subprocess.run([gcloud, "auth", "login"])
+            pause()
+        elif picked == "Turn off":
+            save_widget_setting("geminiProjects", "")
+            say("Gemini API turned off.")
+            pause()
+        elif picked == "Test":
+            projects = [p for p in str(widget_setting("geminiProjects", "")).split(",") if p]
+            if not projects:
+                say("Choose projects first.")
+            else:
+                r = reader()
+                result = r.gemini_usage(sorted(projects), os.path.join(STATE, "omarchy-agent-stats", "gemini.json.test"))
+                try:
+                    os.remove(os.path.join(STATE, "omarchy-agent-stats", "gemini.json.test"))
+                except OSError:
+                    pass
+                if result.get("ok"):
+                    say("Today: %d requests (%d failed)" % (result["requests"], result["errors"]))
+                    for model, c in (result.get("models") or {}).items():
+                        say(f"  {model}: {c['in']:,} in · {c['out']:,} out")
+                if result.get("error"):
+                    say("Problem: " + result["error"])
+            pause()
+        else:
+            found = find_gemini_projects()
+            if found is None:
+                pause()
+                continue
+            if not found:
+                say("No project had Gemini API requests in the last 7 days.")
+                pause()
+                continue
+            labels = {f"{p}  ({n} requests in 7 days)": p for p, n in found}
+            current = set(str(widget_setting("geminiProjects", "")).split(","))
+            chosen = choose_many("Pick the projects to show (space to toggle, enter to save)",
+                                 list(labels), [l for l, p in labels.items() if p in current])
+            if chosen is None:
+                continue
+            value = ",".join(sorted(labels[l] for l in chosen))
+            save_widget_setting("geminiProjects", value)
+            say("Saved: " + (value or "none (Gemini off)"))
+            pause()
+
+
 def manage_other(agent_id, name):
     rec = record(agent_id)
     clear()
@@ -306,6 +460,8 @@ def main():
             name = str(rec.get("name") or agent_id)[:24]
             ready = bool(rec.get("limits") or rec.get("balance"))
             rows.append((not ready, name.lower(), agent_id, name, status(rec)))
+        gemini_on = bool(widget_setting("geminiProjects", ""))
+        rows.append((not gemini_on, "gemini api", "gemini-api", "Gemini API (AI Studio)", gemini_status()))
         rows.sort()
         clear()
         labels = {f"{'●' if not r[0] else '○'} {r[3]:<20} {r[4]}"[:110]: r for r in rows}
@@ -314,7 +470,9 @@ def main():
         if picked in (None, "Quit"):
             return 0
         _, _, agent_id, name, _ = labels[picked]
-        if agent_id in KEYED:
+        if agent_id == "gemini-api":
+            manage_gemini()
+        elif agent_id in KEYED:
             manage_keys(agent_id, name)
         elif agent_id in ACCOUNTS:
             manage_account(agent_id, name)

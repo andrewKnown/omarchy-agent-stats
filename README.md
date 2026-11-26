@@ -70,6 +70,28 @@ Keys are never shown in full or written anywhere else.
 **Show in bar** in the menu toggles each provider on or off in the bar
 (`hiddenAgents`, a comma-separated list of ids such as `grok,kimi`).
 
+## Google Gemini API (AI Studio)
+
+Pick **Gemini API (AI Studio)** in **Providers & keys…** to show Gemini API
+usage as `GM` in the bar: today's tokens, with requests (and failures) and
+input/output tokens per model on hover. Click it to open AI Studio's usage page.
+
+- It needs the Google Cloud CLI (`gcloud`), signed in to the Google account your
+  AI Studio keys belong to; the Providers screen can run `gcloud auth login`.
+- **Choose projects** lists your Google Cloud projects that had Gemini API
+  requests in the last 7 days; pick the ones to show (`geminiProjects`).
+- Numbers come from Google Cloud Monitoring (`serviceruntime` request counts and
+  the `generativelanguage.googleapis.com` token metrics), asked every 5 minutes
+  or at the Update frequency, with a short-lived token from
+  `gcloud auth print-access-token`, sent only to monitoring.googleapis.com and
+  never stored. "Today" is since local midnight.
+- **No spend or balance.** Google offers no API for Gemini API spend or prepay
+  credit; they're only in AI Studio (aistudio.google.com/spend). The only
+  programmatic cost source is a BigQuery billing export, up to a day behind,
+  which this plugin doesn't read.
+- Google's account may ask for a fresh sign-in now and then; Gemini then shows
+  stale with a hint to run `gcloud auth login`.
+
 ## How fresh the numbers are
 
 Omarchy's Agents plugin refreshes the usage records on its own schedule, every
@@ -192,6 +214,7 @@ Set these on the widget's entry in `~/.config/omarchy/shell.json`, or with
 | `claudeExtra` | `false` | Ask Anthropic for Claude's extra-usage spend this month (see above) |
 | `extraText` | `Left` | While on extra usage, show the credit `Left` ($ and %) or the amount `Spent` |
 | `warnAt` | `80` | Percentage at which a meter turns urgent |
+| `geminiProjects` | `""` | Google Cloud project ids whose Gemini API usage to show (see above); empty = off |
 | `hiddenAgents` | `""` | Comma-separated provider ids to leave out of the bar |
 | `updateFrequency` | `Off` | `Off`, `Max`, `3m`, `5m`, `10m` or `15m` (see "How fresh the numbers are") |
 | `refreshIntervalSec` | `60` | How often the local usage files are re-read |

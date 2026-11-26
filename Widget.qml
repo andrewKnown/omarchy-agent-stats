@@ -155,9 +155,11 @@ Panel {
   readonly property string logoDir: (Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy") + "/shell/plugins/agents/assets/"
   readonly property bool lightBar: (0.299 * fg.r + 0.587 * fg.g + 0.114 * fg.b) < 0.5
   function logoUrl(id) {
-    if (!/^[a-z0-9-]{1,24}$/.test(String(id))) return ""
+    if (!/^[a-z0-9-]{1,24}$/.test(String(id)) || noLogo[id]) return ""
     return "file://" + logoDir + id + (lightBar && lightLogos[id] ? "-light" : "") + ".svg"
   }
+  // Entries this plugin adds itself, with no logo in Omarchy's set.
+  readonly property var noLogo: ({ "gemini-api": true })
   // Agents whose logo has a separate light-bar version.
   readonly property var lightLogos: ({ agy: true, codex: true, copilot: true, cursor: true, devin: true,
     grokbot: true, grok: true, hermes: true, kimi: true, minimax: true, muse: true, ollama: true,
@@ -205,7 +207,7 @@ Panel {
 
   // Two-letter badges so Claude and Codex don't both read "C"; any other agent
   // falls back to the first two letters of its name.
-  readonly property var badges: ({ claude: "CL", codex: "CX", grok: "GK", cursor: "CU", copilot: "CP" })
+  readonly property var badges: ({ claude: "CL", codex: "CX", grok: "GK", cursor: "CU", copilot: "CP", "gemini-api": "GM" })
   function badge(agent) {
     return badges[agent.id] || String(agent.name).replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase()
   }
@@ -230,6 +232,7 @@ Panel {
       if (root.openrouterLive) cmd.push("--openrouter-live")
       if (root.claudeExtra) cmd.push("--claude-extra")
       cmd.push("--openrouter-age=" + root.openrouterAgeSec, "--claude-age=" + root.claudeAgeSec)
+      if (root.geminiProjects) cmd.push("--gemini-projects=" + root.geminiProjects, "--gemini-age=" + root.geminiAgeSec)
       return cmd
     }
     stdout: StdioCollector {
@@ -275,6 +278,11 @@ Panel {
   property var lastNudge: ({})
   readonly property int openrouterAgeSec: nudgeMin > 0 && !maxFrequency ? nudgeMin * 60 : 55
   readonly property int claudeAgeSec: maxFrequency ? 180 : nudgeMin > 0 ? nudgeMin * 60 : 300
+  readonly property int geminiAgeSec: maxFrequency ? 60 : nudgeMin > 0 ? nudgeMin * 60 : 300
+  // Google Cloud projects whose Gemini API usage to show (set from the
+  // Providers screen); empty = no Gemini check.
+  readonly property string geminiProjects: String(setting("geminiProjects", "") || "").split(",")
+    .map(function(x) { return x.trim() }).filter(function(x) { return /^[a-z][a-z0-9-]{5,29}$/.test(x) }).join(",")
   readonly property int readMs: maxFrequency ? 30000 : intervalMs
   Process {
     id: nudger
@@ -292,7 +300,7 @@ Panel {
       var cmd = ["omarchy-agent-usage-update", "--limits-only"]
       for (var i = 0; i < root.visibleAgents.length; i++) {
         var id = String(root.visibleAgents[i].id)
-        if (!/^[a-z][a-z0-9-]{0,23}$/.test(id) || (id === "openrouter" && root.openrouterLive)) continue
+        if (!/^[a-z][a-z0-9-]{0,23}$/.test(id) || (id === "openrouter" && root.openrouterLive) || id === "gemini-api") continue
         var gap = Math.max(root.nudgeMin, root.providerFloorMin[id] || 1) * 60000
         // Due once its full gap has passed (a few seconds' slack for timing),
         // so Claude is never asked more often than Anthropic allows.
@@ -353,7 +361,22 @@ Panel {
         lines.push("Average per month (last 3 completed): " + money(stats.monthlyAverage, p.currency))
       }
     }
-    if (a.liveError) lines.push("Live check: " + a.liveError)
+    var gm = a.gemini
+    if (gm) {
+      lines.push("Today: " + gm.requests + " requests" + (gm.errors ? " (" + gm.errors + " failed)" : "")
+        + " · " + formatTokens(gm.tokens) + " tokens")
+      var names = Object.keys(gm.models || {})
+      for (var m = 0; m < names.length && m < 6; m++) {
+        var c = gm.models[names[m]]
+        lines.push("  " + names[m] + ": " + formatTokens(c["in"]) + " in · " + formatTokens(c.out) + " out")
+      }
+      var projects = gm.perProject || []
+      if (projects.length > 1)
+        for (var q = 0; q < projects.length; q++)
+          lines.push("  " + projects[q].id + ": " + projects[q].requests + " requests")
+      lines.push("Google gives no API for Gemini spend or prepay balance")
+    }
+    if (a.liveError) lines.push((gm || a.id === "gemini-api" ? "Google Cloud: " : "Live check: ") + a.liveError)
     var x = a.extra
     if (x && x.used !== undefined) {
       var flags = (x.enabled ? "" : " · off") + (x.reached ? " · limit reached" : "") + (x.stale ? " · stale" : "")
@@ -378,7 +401,8 @@ Panel {
     if (lowAlert !== "Off" && limitLow(a)) lines.push("Low: " + remaining(a).toFixed(0) + "% left (alert at " + lowAlertAt + "%)")
     if (lowAlert !== "Off" && balanceLow(a)) lines.push("Low balance (alert at " + money(lowBalanceAt, p.currency) + ")")
     lines.push("")
-    lines.push((launchers[a.id] ? "Click: open " + a.name : "Click: Agents panel") + " · Right: menu · Middle: refresh")
+    lines.push((launchers[a.id] ? "Click: open " + a.name : a.id === "gemini-api" ? "Click: AI Studio usage"
+      : "Click: Agents panel") + " · Right: menu · Middle: refresh")
     return lines.join("\n")
   }
 
@@ -549,10 +573,11 @@ Panel {
             // Prepaid agents show their balance; an agent past its plan limit
             // and running on extra usage shows what that has cost this month.
             readonly property bool extraShown: root.onExtra(agentItem.modelData)
-            visible: !!agentItem.modelData.prepaid || extraShown
+            visible: !!agentItem.modelData.prepaid || extraShown || !!agentItem.modelData.gemini
             textFormat: Text.PlainText
             text: agentItem.modelData.prepaid ? root.prepaidLabel(agentItem.modelData.prepaid)
-              : extraShown ? root.extraLabel(agentItem.modelData.extra) : ""
+              : extraShown ? root.extraLabel(agentItem.modelData.extra)
+              : agentItem.modelData.gemini ? root.formatTokens(agentItem.modelData.gemini.tokens) : ""
             color: root.balanceLow(agentItem.modelData) || (extraShown && root.extraLow(agentItem.modelData)) ? root.hot : root.fg
             font.family: root.font
             font.pixelSize: 11
@@ -575,6 +600,9 @@ Panel {
               refreshLater.restart()
             } else if (button === Qt.RightButton) {
               root.toggle()
+            } else if (agentItem.modelData.id === "gemini-api") {
+              // Gemini isn't in Omarchy's Agents panel; its own usage page is.
+              Quickshell.execDetached(["xdg-open", "https://aistudio.google.com/usage"])
             } else if (!launcher) {
               root.openPanel()
             } else {

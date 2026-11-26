@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.andrewknown.agent-stats",
   "name": "Omarchy Agent Stats",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "author": "andrewKnown",
   "license": "MIT",
-  "description": "Per-agent rate-limit meters, prepaid balances (OpenRouter) and today's token total in the bar, built on Omarchy's own Agents usage data. Click an agent to open it in a terminal.",
+  "description": "Per-agent rate-limit meters, prepaid balances (OpenRouter), Claude extra usage, Gemini API usage and today's token total in the bar, built on Omarchy's own Agents usage data. Click an agent to open it in a terminal.",
   "kinds": [
     "bar-widget"
   ],
@@ -31,7 +31,8 @@
       "claudeExtra": false,
       "extraText": "Left",
       "updateFrequency": "Off",
-      "hiddenAgents": ""
+      "hiddenAgents": "",
+      "geminiProjects": ""
     },
     "schema": [
       {
@@ -159,6 +160,13 @@
         "label": "Providers hidden from the bar",
         "defaultValue": "",
         "description": "Comma-separated agent ids to leave out of the bar, e.g. grok,kimi. Toggle them from the menu's Show in bar row."
+      },
+      {
+        "key": "geminiProjects",
+        "type": "string",
+        "label": "Google Cloud projects for Gemini API usage",
+        "defaultValue": "",
+        "description": "Comma-separated project ids whose Gemini API (AI Studio) usage to show: requests and tokens today, from Google Cloud Monitoring with your gcloud sign-in. Pick them in Providers & keys. Empty = off."
       }
     ]
   }

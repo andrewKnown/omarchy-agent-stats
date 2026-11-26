@@ -24,9 +24,18 @@
 # in $CLAUDE_CONFIG_DIR/.credentials.json (default ~/.claude), sends it only to
 # api.anthropic.com, never refreshes or stores it, and skips the check while it
 # has lapsed (Claude Code renews it when it next runs).
+#
+# With --gemini-projects=ID,ID (set from the Providers screen) Google Cloud
+# Monitoring is asked for those projects' Gemini API (AI Studio) usage today:
+# requests by result, and input/output tokens by model. Google offers no API
+# for Gemini spend or prepay balance, so there is none. It uses a short-lived
+# access token from the user's own `gcloud auth print-access-token`, sent only
+# to monitoring.googleapis.com and never stored.
 import json
 import math
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -307,6 +316,157 @@ def age_arg(name, default, floor):
     return default
 
 
+GEMINI_MIN_AGE = 300
+MONITORING = "https://monitoring.googleapis.com/v3/projects/"
+GEMINI_METRIC = "generativelanguage.googleapis.com/"
+# Input tokens are only reported through the per-tier quota counters.
+GEMINI_INPUT_METRICS = ("free_tier", "paid_tier", "paid_tier_2", "paid_tier_3")
+
+
+def gcloud_path():
+    found = shutil.which("gcloud")
+    if found:
+        return found
+    for candidate in ("~/.local/share/mise/shims/gcloud", "~/google-cloud-sdk/bin/gcloud",
+                      "/opt/google-cloud-cli/bin/gcloud", "/usr/lib/google-cloud-sdk/bin/gcloud"):
+        path = os.path.expanduser(candidate)
+        if os.access(path, os.X_OK):
+            return path
+    return None
+
+
+def gcloud_token():
+    """(token, error): a short-lived access token from the user's gcloud."""
+    gcloud = gcloud_path()
+    if not gcloud:
+        return None, "gcloud not installed"
+    try:
+        out = subprocess.run([gcloud, "auth", "print-access-token"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return None, "gcloud: " + type(error).__name__
+    token = out.stdout.strip()
+    if out.returncode != 0 or not token or not token.isprintable() or len(token) > 4096:
+        if "reauth" in out.stderr.lower() or "auth login" in out.stderr.lower():
+            return None, "Google sign-in expired: run gcloud auth login"
+        return None, "gcloud gave no token"
+    return token, ""
+
+
+def monitoring_series(project, token, metric_filter, start, end, group_by):
+    """[(labels, total)] per group, each summed over [start, end]."""
+    from urllib.parse import urlencode, quote
+    period = max(60, int((end - start).total_seconds()))
+    query = urlencode([
+        ("filter", metric_filter),
+        ("interval.startTime", start.strftime("%Y-%m-%dT%H:%M:%SZ")),
+        ("interval.endTime", end.strftime("%Y-%m-%dT%H:%M:%SZ")),
+        ("aggregation.alignmentPeriod", "%ds" % period),
+        ("aggregation.perSeriesAligner", "ALIGN_DELTA"),
+        ("aggregation.crossSeriesReducer", "REDUCE_SUM"),
+    ] + [("aggregation.groupByFields", g) for g in group_by])
+    request = urllib.request.Request(MONITORING + quote(project) + "/timeSeries?" + query,
+                                     headers={"Authorization": "Bearer " + token, "User-Agent": "omarchy-agent-stats"})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        data = json.loads(response.read(2_000_000))
+    out = []
+    for series in data.get("timeSeries") or []:
+        labels = (series.get("metric") or {}).get("labels") or {}
+        total = 0.0
+        for point in series.get("points") or []:
+            value = point.get("value") or {}
+            try:
+                total += float(value.get("int64Value", value.get("doubleValue", 0)))
+            except (TypeError, ValueError):
+                pass
+        out.append(({k: text(v, 64) for k, v in labels.items()}, total))
+    return out
+
+
+def gemini_project(project, token, start, end):
+    reqs = monitoring_series(project, token,
+        'metric.type="serviceruntime.googleapis.com/api/request_count" AND resource.type="consumed_api" '
+        'AND resource.labels.service="generativelanguage.googleapis.com"',
+        start, end, ["metric.labels.response_code_class"])
+    models = {}
+    for labels, value in monitoring_series(project, token,
+            'metric.type="%sgenerate_content_usage_output_token_count"' % GEMINI_METRIC, start, end, ["metric.labels.model"]):
+        if labels.get("model"):
+            models.setdefault(labels["model"], {"in": 0, "out": 0})["out"] += int(value)
+    for tier in GEMINI_INPUT_METRICS:
+        # A quota counter is reported once per limit it feeds (per minute,
+        # per user, ...), each with the same count: take one per model.
+        best = {}
+        for labels, value in monitoring_series(project, token,
+                'metric.type="%squota/generate_content_%s_input_token_count/usage"' % (GEMINI_METRIC, tier),
+                start, end, ["metric.labels.model", "metric.labels.limit_name"]):
+            model = labels.get("model")
+            if model:
+                best[model] = max(best.get(model, 0), int(value))
+        for model, value in best.items():
+            models.setdefault(model, {"in": 0, "out": 0})["in"] += value
+    return {"requests": int(sum(v for _, v in reqs)),
+            "errors": int(sum(v for l, v in reqs if not str(l.get("response_code_class", "")).startswith("2"))),
+            "models": models}
+
+
+def gemini_usage(projects, cache_path):
+    cached = load_spend(cache_path)
+    try:
+        fetched = float(cached.get("fetchedAt") or 0)
+    except (TypeError, ValueError):
+        fetched = 0
+    today = datetime.now().astimezone().date().isoformat()
+    same = cached.get("projects") == projects and cached.get("day") == today
+    if same and cached.get("ok") and time.time() - fetched < age_arg("gemini-age", GEMINI_MIN_AGE, 60):
+        return cached
+    token, error = gcloud_token()
+    if token:
+        now = datetime.now().astimezone()
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+        end = now.astimezone(timezone.utc)
+        per_project, errors = [], []
+
+        def one(project):
+            try:
+                usage = gemini_project(project, token, start, end)
+                usage["id"] = project
+                return usage, None
+            except urllib.error.HTTPError as err:
+                return None, "%s: HTTP %d" % (project, err.code)
+            except (OSError, ValueError, urllib.error.URLError) as err:
+                return None, "%s: %s" % (project, type(err).__name__)
+
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(4, len(projects))) as pool:
+            for usage, err in pool.map(one, projects):
+                if usage:
+                    per_project.append(usage)
+                else:
+                    errors.append(err)
+        if per_project:
+            models = {}
+            for usage in per_project:
+                for model, counts in usage["models"].items():
+                    entry = models.setdefault(model, {"in": 0, "out": 0})
+                    entry["in"] += counts["in"]
+                    entry["out"] += counts["out"]
+            result = {"ok": True, "stale": bool(errors), "error": "; ".join(errors)[:80], "fetchedAt": time.time(),
+                      "projects": projects, "day": today,
+                      "requests": sum(u["requests"] for u in per_project),
+                      "errors": sum(u["errors"] for u in per_project),
+                      "models": models,
+                      "perProject": [{"id": u["id"], "requests": u["requests"],
+                                      "tokens": sum(c["in"] + c["out"] for c in u["models"].values())} for u in per_project]}
+            save_spend(cache_path, result)
+            return result
+        error = "; ".join(errors)[:80] or "no data"
+    if same and cached.get("ok"):
+        stale = dict(cached)
+        stale.update(stale=True, error=error)
+        return stale
+    return {"ok": False, "error": error}
+
+
 CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 CLAUDE_MIN_AGE = 300  # seconds by default; never below 180, Anthropic refuses faster probes
 
@@ -393,6 +553,11 @@ def claude_extra(cache_path):
 def main():
     live_openrouter = "--openrouter-live" in sys.argv[1:]
     want_claude_extra = "--claude-extra" in sys.argv[1:]
+    gemini_projects = []
+    for arg in sys.argv[1:]:
+        if arg.startswith("--gemini-projects="):
+            gemini_projects = sorted({p for p in arg.split("=", 1)[1].split(",")
+                                      if 6 <= len(p) <= 30 and p.replace("-", "").isalnum() and p[0].isalpha() and p == p.lower()})[:8]
     state = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
     spend_path = os.path.join(state, "omarchy-agent-stats", "spend.json")
     spend = load_spend(spend_path)
@@ -515,6 +680,16 @@ def main():
                         agent["extra"]["error"] = text(extra["error"], 80)
                 else:
                     agent["extra"] = {"error": text(extra.get("error") or "unavailable", 80)}
+
+    if gemini_projects:
+        g = gemini_usage(gemini_projects, os.path.join(state, "omarchy-agent-stats", "gemini.json"))
+        entry = {"id": "gemini-api", "name": "Gemini API", "stale": bool(g.get("stale")), "limits": []}
+        if g.get("ok"):
+            entry["gemini"] = {k: g.get(k) for k in ("requests", "errors", "models", "perProject")}
+            entry["gemini"]["tokens"] = sum(c["in"] + c["out"] for c in (g.get("models") or {}).values())
+        if g.get("error"):
+            entry["liveError"] = text(g["error"], 80)
+        agents.append(entry)
 
     if spend_changed:
         save_spend(spend_path, spend)
