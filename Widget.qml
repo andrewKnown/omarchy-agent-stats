@@ -213,6 +213,7 @@ Panel {
       var cmd = ["python3", "-I", root.scriptPath]
       if (root.openrouterLive) cmd.push("--openrouter-live")
       if (root.claudeExtra) cmd.push("--claude-extra")
+      if (root.updateEveryMin > 0) cmd.push("--every=" + root.updateEveryMin * 60)
       return cmd
     }
     stdout: StdioCollector {
@@ -229,6 +230,35 @@ Panel {
           root.todayByAgent = []
         }
       }
+    }
+  }
+
+  // Best-effort faster updates: Omarchy's Agents plugin refreshes the usage
+  // records on its own schedule (every 15 minutes by default). With
+  // updateEveryMin set, this widget also asks Omarchy's own updater for fresh
+  // limits (--limits-only, the cheap kind the Agents panel runs when opened)
+  // for just the agents shown. Never more often than every 3 minutes, the
+  // pace Omarchy itself keeps to, because Anthropic refuses faster probes.
+  readonly property int updateEveryMin: {
+    var n = Math.round(Number(setting("updateEveryMin", 0)) || 0)
+    return n <= 0 ? 0 : Math.max(3, Math.min(60, n))
+  }
+  Process {
+    id: nudger
+    onExited: root.refresh()
+  }
+  Timer {
+    interval: Math.max(3, root.updateEveryMin) * 60000
+    repeat: true
+    running: root.updateEveryMin > 0
+    onTriggered: {
+      if (nudger.running) return
+      var cmd = ["omarchy-agent-usage-update", "--limits-only"]
+      for (var i = 0; i < root.agents.length; i++) {
+        var id = String(root.agents[i].id)
+        if (/^[a-z][a-z0-9-]{0,23}$/.test(id) && !(id === "openrouter" && root.openrouterLive)) cmd.push(id)
+      }
+      if (cmd.length > 2) { nudger.command = cmd; nudger.running = true }
     }
   }
 
@@ -645,6 +675,13 @@ Panel {
           options: ["Left", "Spent"]
           current: root.extraText
           onChosen: function(value) { root.saveSetting("extraText", value, false) }
+        }
+
+        MenuChoice {
+          title: "Update usage every"
+          options: ["Off", "3m", "5m", "10m", "15m"]
+          current: root.updateEveryMin > 0 ? root.updateEveryMin + "m" : "Off"
+          onChosen: function(value) { root.saveSetting("updateEveryMin", value === "Off" ? "0" : parseInt(value), true) }
         }
 
         Row {

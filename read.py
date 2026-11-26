@@ -295,6 +295,17 @@ def openrouter_live(cache_path):
     return result
 
 
+def every_seconds():
+    """The widget's chosen update interval (--every=SECONDS), else 0."""
+    for arg in sys.argv[1:]:
+        if arg.startswith("--every="):
+            try:
+                return max(0, min(3600, int(arg[8:])))
+            except ValueError:
+                return 0
+    return 0
+
+
 CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 CLAUDE_MIN_AGE = 300  # seconds; Anthropic refuses this endpoint if asked too often
 
@@ -351,7 +362,7 @@ def claude_extra(cache_path):
         fetched = float(cached.get("fetchedAt") or 0)
     except (TypeError, ValueError):
         fetched = 0
-    if cached.get("ok") and time.time() - fetched < CLAUDE_MIN_AGE:
+    if cached.get("ok") and time.time() - fetched < max(CLAUDE_MIN_AGE, every_seconds()):
         return cached
     expires = oauth.get("expiresAt")
     if isinstance(expires, (int, float)) and not isinstance(expires, bool) and expires / 1000 < time.time():

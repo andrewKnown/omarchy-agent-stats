@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.andrewknown.agent-stats",
   "name": "Omarchy Agent Stats",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "author": "andrewKnown",
   "license": "MIT",
   "description": "Per-agent rate-limit meters, prepaid balances (OpenRouter) and today's token total in the bar, built on Omarchy's own Agents usage data. Click an agent to open it in a terminal.",
@@ -29,7 +29,8 @@
       "lowBalanceAt": 5,
       "openrouterLive": false,
       "claudeExtra": false,
-      "extraText": "Left"
+      "extraText": "Left",
+      "updateEveryMin": 0
     },
     "schema": [
       {
@@ -40,6 +41,16 @@
         "max": 900,
         "step": 15,
         "defaultValue": 60
+      },
+      {
+        "key": "updateEveryMin",
+        "type": "integer",
+        "label": "Update usage every (minutes, 0 = Omarchy's schedule)",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 0,
+        "description": "Best effort. Omarchy's Agents plugin refreshes usage on its own schedule (15 minutes by default). Set this to also ask Omarchy's updater for fresh limits (omarchy agent usage-update --limits-only) for the agents shown, at most every 3 minutes."
       },
       {
         "key": "warnAt",
