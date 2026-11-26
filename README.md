@@ -261,6 +261,15 @@ omarchy plugin remove io.github.andrewknown.agent-stats
 
 MIT
 
+## Development
+
+```bash
+bash tests/run.sh
+```
+
+runs every test offline, with temporary folders, stand-in commands and
+simulated provider answers; it never reads your real keys or config.
+
 ## Credits
 
 The Gemini logo in `assets/` is the Google Gemini icon from
