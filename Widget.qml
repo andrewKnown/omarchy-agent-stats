@@ -111,9 +111,20 @@ Panel {
     return pct !== null && pct <= lowAlertAt
   }
   function extraLabel(x) {
+    if (x.reached === true || x.enabled !== true)
+      return extraText === "Spent" ? money(x.used, x.currency) : money(0, x.currency) + " 0%"
     if (extraText === "Left" && extraLeft(x) !== null)
       return money(extraLeft(x), x.currency) + " " + extraLeftPct(x) + "%"
     return money(x.used, x.currency)
+  }
+  // Shown next to the meters whenever a plan limit is full and the account has
+  // extra usage figures: what's left while credits carry on, and $0.00 0% in
+  // red once the cap is reached or extra usage is off.
+  function showExtra(agent) {
+    return !!agent.extra && agent.extra.used !== undefined && agent.extra.used !== null && fullLimits(agent).length > 0
+  }
+  function extraSpent(agent) {
+    return !!agent.extra && (agent.extra.reached === true || agent.extra.enabled !== true)
   }
   function onExtra(agent) {
     return !!agent.extra && agent.extra.enabled === true && agent.extra.reached !== true && fullLimits(agent).length > 0
@@ -648,13 +659,14 @@ Panel {
             anchors.verticalCenter: parent.verticalCenter
             // Prepaid agents show their balance; an agent past its plan limit
             // and running on extra usage shows what that has cost this month.
-            readonly property bool extraShown: root.onExtra(agentItem.modelData)
+            readonly property bool extraShown: root.showExtra(agentItem.modelData)
             visible: !!agentItem.modelData.prepaid || extraShown || !!agentItem.modelData.gemini
             textFormat: Text.PlainText
             text: agentItem.modelData.prepaid ? root.prepaidLabel(agentItem.modelData.prepaid)
               : extraShown ? root.extraLabel(agentItem.modelData.extra)
               : agentItem.modelData.gemini ? root.formatTokens(agentItem.modelData.gemini.tokens) : ""
-            color: root.balanceLow(agentItem.modelData) || (extraShown && root.extraLow(agentItem.modelData)) ? root.hot : root.fg
+            color: root.balanceLow(agentItem.modelData) || (extraShown && (root.extraSpent(agentItem.modelData)
+              || root.extraLow(agentItem.modelData))) ? root.hot : root.fg
             font.family: root.font
             font.pixelSize: 11
             font.bold: true
