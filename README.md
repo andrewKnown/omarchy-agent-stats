@@ -28,16 +28,16 @@ installed opens its page or else the Agents panel. While Cursor's sign-in is in
 starts with the display hidden from it, so launching it from the bar doesn't
 move the sign-in back into the keyring and blank its usage and Grok Bot's.
 
-The right-click menu:
+The right-click menu holds the everyday choices: **Agent badge** (letters or
+logos), **Update frequency**, **Show in bar** (each provider on or off), then
+**Settings & providers…**, **Agents panel** and **Refresh**.
 
-- **Agent badge**: letters or logos. **Pulse while working**: on or off.
-- **Low usage alert** and **Alert at % remaining**: the ring, and when it appears.
-- **Prepaid shows**, **Low balance at**, **OpenRouter usage source**: prepaid
-  providers (shown once one is set up).
-- **Claude extra usage** and **Extra usage shows**: the extra-usage check.
-- **Update frequency**: how often numbers refresh.
-- **Show in bar**: each provider on or off.
-- **Providers & keys…**, **Agents panel**, **Refresh**.
+**Settings & providers…** opens a setup screen in Omarchy's floating terminal.
+Its **Display & alerts** page covers the rest: the activity pulse, when meters
+turn red, the low usage ring and its threshold, what prepaid providers show and
+their low-balance ring, where OpenRouter's numbers come from, and the Claude
+extra-usage check. Below it are the providers themselves (see "Providers and
+keys").
 
 Choices are saved to the widget's entry in `~/.config/omarchy/shell.json` through
 `omarchy bar set`. You can also toggle the menu from a keybinding or script:
@@ -69,7 +69,7 @@ The widget shows every provider Omarchy's Agents plugin tracks that has limits
 or a balance (Claude, Codex, Grok, OpenRouter, Copilot, Cursor, Antigravity,
 DeepSeek, Kimi, Z.ai, Ollama Cloud and more, as you sign in to them).
 
-**Providers & keys…** in the menu opens a small setup screen in Omarchy's
+**Settings & providers…** in the menu opens a small setup screen in Omarchy's
 floating terminal (`providers.py`). It lists every provider with what Omarchy
 currently reports, and for each one:
 
@@ -91,7 +91,7 @@ Keys are never shown in full or written anywhere else.
 
 ## Google Gemini API (AI Studio)
 
-Pick **Gemini API (AI Studio)** in **Providers & keys…** to show Gemini API
+Pick **Gemini API (AI Studio)** in **Settings & providers…** to show Gemini API
 usage in the bar (its logo, or `GM` with letter badges): today's tokens, with requests (and failures) and
 input/output tokens per model on hover. Click it to open AI Studio's usage page.
 

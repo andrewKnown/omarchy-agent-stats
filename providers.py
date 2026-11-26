@@ -74,8 +74,49 @@ def widget_setting(key, default=""):
     return default
 
 
-def save_widget_setting(key, value):
-    subprocess.run(["omarchy-bar", "set", WIDGET_ID, key, value], stdout=subprocess.DEVNULL)
+def save_widget_setting(key, value, as_json=False):
+    cmd = ["omarchy-bar", "set", WIDGET_ID, key, json.dumps(value) if as_json else str(value)]
+    subprocess.run(cmd + (["--json"] if as_json else []), stdout=subprocess.DEVNULL)
+
+
+# The widget's display and alert settings, each with the choices offered here
+# as (label, value). Anything else can still be set in shell.json.
+DISPLAY = [
+    ("activityPulse", "Pulse while an agent is working", [("Off", False), ("On", True)]),
+    ("warnAt", "Turn a meter red at % used", [("70%", 70), ("80%", 80), ("90%", 90), ("95%", 95)]),
+    ("lowAlert", "Low usage ring", [("Off", "Off"), ("Ring", "Ring"), ("Pulsing ring", "Pulse")]),
+    ("lowAlertAt", "Ring when % left is at or below", [("5%", 5), ("10%", 10), ("20%", 20), ("30%", 30)]),
+    ("prepaidText", "Prepaid providers show", [("Balance", "Balance"), ("Spent today", "Today"), ("Spent this month", "Month")]),
+    ("lowBalanceAt", "Ring when a balance drops to", [("Off", 0), ("$1", 1), ("$5", 5), ("$10", 10), ("$20", 20)]),
+    ("openrouterLive", "OpenRouter numbers", [("Local estimates (no network)", False), ("Live from the OpenRouter API", True)]),
+    ("claudeExtra", "Claude extra usage check", [("Off", False), ("On (asks Anthropic every 5 min)", True)]),
+    ("extraText", "Claude extra usage shows", [("Credit left ($ and %)", "Left"), ("Amount spent", "Spent")]),
+]
+
+
+def manifest_defaults():
+    return read_json(os.path.join(HERE, "manifest.json")).get("barWidget", {}).get("defaults", {})
+
+
+def manage_display():
+    defaults = manifest_defaults()
+    while True:
+        clear()
+        heading("Display & alerts")
+        rows = {}
+        for key, label, choices in DISPLAY:
+            current = widget_setting(key, defaults.get(key))
+            shown = next((l for l, v in choices if v == current), str(current))
+            rows[f"{label}: {shown}"] = (key, label, choices)
+        picked = choose("Pick a setting to change (Esc to go back)", list(rows) + ["Back"])
+        if picked in (None, "Back"):
+            return
+        key, label, choices = rows[picked]
+        value_label = choose(label, [l for l, _ in choices])
+        if value_label is None:
+            continue
+        value = dict(choices)[value_label]
+        save_widget_setting(key, value, as_json=not isinstance(value, str))
 
 
 # ------------------------------------------------------------------ ui bits
@@ -463,14 +504,18 @@ def main():
         gemini_on = bool(widget_setting("geminiProjects", ""))
         rows.append((not gemini_on, "gemini api", "gemini-api", "Gemini API (AI Studio)", gemini_status()))
         rows.sort()
+        rows.insert(0, (False, "", "display", "Display & alerts", "rings, colours, what prepaid and extra usage show"))
         clear()
-        labels = {f"{'●' if not r[0] else '○'} {r[3]:<20} {r[4]}"[:110]: r for r in rows}
-        heading("Agent Stats providers  (● shown in the bar  ○ nothing to show yet)")
-        picked = choose("Pick a provider to set up (Esc to quit)", list(labels) + ["Quit"])
+        mark = lambda r: "⚙" if r[2] == "display" else "●" if not r[0] else "○"
+        labels = {f"{mark(r)} {r[3]:<20} {r[4]}"[:110]: r for r in rows}
+        heading("Agent Stats settings and providers  (● shown in the bar  ○ nothing to show yet)")
+        picked = choose("Pick a setting or provider (Esc to quit)", list(labels) + ["Quit"])
         if picked in (None, "Quit"):
             return 0
         _, _, agent_id, name, _ = labels[picked]
-        if agent_id == "gemini-api":
+        if agent_id == "display":
+            manage_display()
+        elif agent_id == "gemini-api":
             manage_gemini()
         elif agent_id in KEYED:
             manage_keys(agent_id, name)

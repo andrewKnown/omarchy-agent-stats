@@ -744,68 +744,6 @@ Panel {
         }
 
         MenuChoice {
-          title: "Pulse while working"
-          options: ["Off", "On"]
-          current: root.activityPulse ? "On" : "Off"
-          onChosen: function(value) { root.saveSetting("activityPulse", value === "On" ? "true" : "false", true) }
-        }
-
-        MenuChoice {
-          title: "Low usage alert"
-          options: ["Off", "Ring", "Pulse"]
-          current: root.lowAlert
-          onChosen: function(value) { root.saveSetting("lowAlert", value, false) }
-        }
-
-        MenuChoice {
-          title: "Alert at % remaining"
-          options: ["5", "10", "20", "30"]
-          current: String(root.lowAlertAt)
-          onChosen: function(value) { root.saveSetting("lowAlertAt", value, true) }
-        }
-
-        MenuChoice {
-          visible: root.hasPrepaid || root.openrouterLive
-          title: "Prepaid shows"
-          options: ["Balance", "Today", "Month"]
-          current: root.prepaidText
-          onChosen: function(value) { root.saveSetting("prepaidText", value, false) }
-        }
-
-        MenuChoice {
-          visible: root.hasPrepaid || root.openrouterLive
-          title: "Low balance at"
-          options: ["Off", "$1", "$5", "$10", "$20"]
-          current: root.lowBalanceAt > 0 ? "$" + root.lowBalanceAt : "Off"
-          onChosen: function(value) { root.saveSetting("lowBalanceAt", value === "Off" ? "0" : value.slice(1), true) }
-        }
-
-        MenuChoice {
-          visible: root.hasPrepaid || root.openrouterLive
-          title: "OpenRouter usage source"
-          options: ["Local estimates", "OpenRouter API"]
-          current: root.openrouterLive ? "OpenRouter API" : "Local estimates"
-          onChosen: function(value) {
-            root.saveSetting("openrouterLive", value === "OpenRouter API" ? "true" : "false", true)
-          }
-        }
-
-        MenuChoice {
-          title: "Claude extra usage"
-          options: ["Off", "On"]
-          current: root.claudeExtra ? "On" : "Off"
-          onChosen: function(value) { root.saveSetting("claudeExtra", value === "On" ? "true" : "false", true) }
-        }
-
-        MenuChoice {
-          visible: root.claudeExtra
-          title: "Extra usage shows"
-          options: ["Left", "Spent"]
-          current: root.extraText
-          onChosen: function(value) { root.saveSetting("extraText", value, false) }
-        }
-
-        MenuChoice {
           title: "Update frequency"
           options: root.frequencies
           current: root.updateFrequency
@@ -849,7 +787,7 @@ Panel {
 
         Button {
           width: parent.width
-          text: "Providers & keys…"
+          text: "Settings & providers…"
           fontSize: Style.font.bodySmall
           foreground: root.fg
           fontFamily: root.font
