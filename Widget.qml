@@ -60,6 +60,30 @@ Panel {
     return v === "Today" || v === "Month" ? v : "Balance"
   }
   readonly property bool openrouterLive: setting("openrouterLive", false) === true
+  readonly property bool claudeExtra: setting("claudeExtra", false) === true
+
+  // A plan limit at 100% blocks the agent until it resets, unless the account
+  // has extra usage (pay-as-you-go) to carry on with.
+  function fullLimits(agent) {
+    var out = []
+    for (var i = 0; i < agent.limits.length; i++) if (Number(agent.limits[i].percent) >= 100) out.push(agent.limits[i])
+    return out
+  }
+  function blockedUntil(agent) {
+    var full = fullLimits(agent), latest = ""
+    for (var i = 0; i < full.length; i++)
+      if (full[i].resetsAt && (!latest || Date.parse(full[i].resetsAt) > Date.parse(latest))) latest = full[i].resetsAt
+    return latest
+  }
+  function onExtra(agent) {
+    return !!agent.extra && agent.extra.enabled === true && agent.extra.reached !== true && fullLimits(agent).length > 0
+  }
+  function resetText(iso) {
+    var t = Date.parse(iso)
+    if (isNaN(t)) return ""
+    var d = new Date(t)
+    return (d.toDateString() === new Date().toDateString() ? "" : Qt.formatDate(d, "ddd ")) + Qt.formatTime(d, "hh:mm")
+  }
   readonly property bool hasPrepaid: {
     for (var i = 0; i < agents.length; i++) if (agents[i].prepaid) return true
     return false
@@ -161,7 +185,12 @@ Panel {
 
   Process {
     id: reader
-    command: root.openrouterLive ? ["python3", "-I", root.scriptPath, "--openrouter-live"] : ["python3", "-I", root.scriptPath]
+    command: {
+      var cmd = ["python3", "-I", root.scriptPath]
+      if (root.openrouterLive) cmd.push("--openrouter-live")
+      if (root.claudeExtra) cmd.push("--claude-extra")
+      return cmd
+    }
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -229,6 +258,18 @@ Panel {
       }
     }
     if (a.liveError) lines.push("Live check: " + a.liveError)
+    var x = a.extra
+    if (x && x.used !== undefined) {
+      lines.push("Extra usage: " + money(x.used, x.currency) + (x.limit ? " of " + money(x.limit, x.currency)
+        + " (" + Math.round(100 * x.used / x.limit) + "%)" : "") + " this month"
+        + (x.enabled ? "" : " · off") + (x.reached ? " · limit reached" : "") + (x.stale ? " · stale" : ""))
+    }
+    if (x && x.error) lines.push("Extra usage check: " + x.error)
+    if (fullLimits(a).length > 0) {
+      var until = blockedUntil(a) ? resetText(blockedUntil(a)) : ""
+      lines.push(onExtra(a) ? "Plan limit reached: on extra usage" + (until ? " until " + until : "")
+        : "Plan limit reached" + (until ? ": blocked until " + until : ""))
+    }
     for (var j = 0; j < a.limits.length; j++) {
       var l = a.limits[j]
       var reset = untilText(l.resetsAt)
@@ -405,9 +446,13 @@ Panel {
           // Prepaid balance, or spend today / this month (prepaidText).
           Text {
             anchors.verticalCenter: parent.verticalCenter
-            visible: !!agentItem.modelData.prepaid
+            // Prepaid agents show their balance; an agent past its plan limit
+            // and running on extra usage shows what that has cost this month.
+            readonly property bool extraShown: root.onExtra(agentItem.modelData)
+            visible: !!agentItem.modelData.prepaid || extraShown
             textFormat: Text.PlainText
-            text: agentItem.modelData.prepaid ? root.prepaidLabel(agentItem.modelData.prepaid) : ""
+            text: agentItem.modelData.prepaid ? root.prepaidLabel(agentItem.modelData.prepaid)
+              : extraShown ? root.money(agentItem.modelData.extra.used, agentItem.modelData.extra.currency) : ""
             color: root.balanceLow(agentItem.modelData) ? root.hot : root.fg
             font.family: root.font
             font.pixelSize: 11
@@ -557,6 +602,13 @@ Panel {
           onChosen: function(value) {
             root.saveSetting("openrouterLive", value === "OpenRouter API" ? "true" : "false", true)
           }
+        }
+
+        MenuChoice {
+          title: "Claude extra usage"
+          options: ["Off", "On"]
+          current: root.claudeExtra ? "On" : "Off"
+          onChosen: function(value) { root.saveSetting("claudeExtra", value === "On" ? "true" : "false", true) }
         }
 
         Row {

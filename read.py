@@ -16,6 +16,14 @@
 # or Omarchy's own ~/.config/omarchy/agents/openrouter.json (apiKey, and
 # managementKey for the balance), and is only ever sent to openrouter.ai.
 # A failed check keeps the last good answer, marked stale.
+#
+# With --claude-extra (the "Claude extra usage" setting) Anthropic's usage
+# endpoint, the one Claude Code's /usage and Omarchy's collector read, is asked
+# at most every five minutes for the account's extra usage (pay-as-you-go spend
+# past the plan's limits) this month. It uses the access token Claude Code keeps
+# in $CLAUDE_CONFIG_DIR/.credentials.json (default ~/.claude), sends it only to
+# api.anthropic.com, never refreshes or stores it, and skips the check while it
+# has lapsed (Claude Code renews it when it next runs).
 import json
 import math
 import os
@@ -287,8 +295,92 @@ def openrouter_live(cache_path):
     return result
 
 
+CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+CLAUDE_MIN_AGE = 300  # seconds; Anthropic refuses this endpoint if asked too often
+
+
+def minor_amount(obj):
+    """An {amount_minor, exponent} money object as a float, or None."""
+    if not isinstance(obj, dict):
+        return None
+    amount, exponent = money(obj.get("amount_minor")), obj.get("exponent", 2)
+    if amount is None or isinstance(exponent, bool) or not isinstance(exponent, int) or not 0 <= exponent <= 4:
+        return None
+    return amount / (10 ** exponent)
+
+
+def parse_extra(payload):
+    spend, extra = payload.get("spend"), payload.get("extra_usage")
+    result = {}
+    if isinstance(spend, dict):
+        used, limit = minor_amount(spend.get("used")), minor_amount(spend.get("limit"))
+        if used is not None:
+            result = {"enabled": spend.get("enabled") is True, "used": round(used, 2),
+                      "limit": round(limit, 2) if limit else None,
+                      "currency": text((spend.get("used") or {}).get("currency") or "USD", 3)}
+    if not result and isinstance(extra, dict):
+        places = extra.get("decimal_places", 2)
+        places = places if isinstance(places, int) and not isinstance(places, bool) and 0 <= places <= 4 else 2
+        used, limit = money(extra.get("used_credits")), money(extra.get("monthly_limit"))
+        if used is not None:
+            result = {"enabled": extra.get("is_enabled") is True, "used": round(used / 10 ** places, 2),
+                      "limit": round(limit / 10 ** places, 2) if limit else None,
+                      "currency": text(extra.get("currency") or "USD", 3)}
+    if not result:
+        raise ValueError("no extra usage in answer")
+    if isinstance(extra, dict):
+        result["reached"] = extra.get("spend_limit_reached") is True
+    if not result["currency"].isalpha():
+        result["currency"] = "USD"
+    return result
+
+
+def claude_extra(cache_path):
+    """Claude's extra usage this month, or None when there's no sign-in."""
+    config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+    try:
+        with open(os.path.join(config, ".credentials.json"), encoding="utf-8") as fh:
+            oauth = json.load(fh).get("claudeAiOauth") or {}
+    except (OSError, ValueError, AttributeError):
+        return None
+    token = oauth.get("accessToken") if isinstance(oauth, dict) else None
+    if not isinstance(token, str) or not 0 < len(token) < 4096 or not token.isprintable():
+        return None
+    cached = load_spend(cache_path)
+    try:
+        fetched = float(cached.get("fetchedAt") or 0)
+    except (TypeError, ValueError):
+        fetched = 0
+    if cached.get("ok") and time.time() - fetched < CLAUDE_MIN_AGE:
+        return cached
+    expires = oauth.get("expiresAt")
+    if isinstance(expires, (int, float)) and not isinstance(expires, bool) and expires / 1000 < time.time():
+        error = "sign-in lapsed; opening Claude Code renews it"
+    else:
+        try:
+            request = urllib.request.Request(CLAUDE_USAGE_URL, headers={
+                "Authorization": "Bearer " + token, "anthropic-beta": "oauth-2025-04-20",
+                "Accept": "application/json", "User-Agent": "omarchy-agent-stats"})
+            with urllib.request.urlopen(request, timeout=8) as response:
+                payload = json.loads(response.read(1_000_000))
+            result = parse_extra(payload if isinstance(payload, dict) else {})
+            result.update(ok=True, stale=False, fetchedAt=time.time())
+            save_spend(cache_path, result)
+            return result
+        except urllib.error.HTTPError as err:
+            error = "refused (%d)" % err.code if err.code in (401, 403) else "HTTP %d" % err.code
+        except (OSError, ValueError, urllib.error.URLError) as err:
+            error = type(err).__name__
+    if cached.get("ok"):
+        stale = dict(cached)
+        stale.update(stale=True, error=error)
+        return stale
+    return {"ok": False, "error": error}
+
+
 def main():
     live_openrouter = "--openrouter-live" in sys.argv[1:]
+    want_claude_extra = "--claude-extra" in sys.argv[1:]
     state = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
     spend_path = os.path.join(state, "omarchy-agent-stats", "spend.json")
     spend = load_spend(spend_path)
@@ -400,6 +492,17 @@ def main():
                 obalance.update(today=t, month=m, todaySince=ds, monthSince=ms)
                 entry["prepaid"] = obalance
             agents.append(entry)
+
+    if want_claude_extra:
+        extra = claude_extra(os.path.join(state, "omarchy-agent-stats", "claude-extra.json"))
+        for agent in agents:
+            if agent["id"] == "claude" and extra is not None:
+                if extra.get("ok"):
+                    agent["extra"] = {k: extra.get(k) for k in ("enabled", "used", "limit", "currency", "reached", "stale")}
+                    if extra.get("error"):
+                        agent["extra"]["error"] = text(extra["error"], 80)
+                else:
+                    agent["extra"] = {"error": text(extra.get("error") or "unavailable", 80)}
 
     if spend_changed:
         save_spend(spend_path, spend)

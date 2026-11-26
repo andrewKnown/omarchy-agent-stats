@@ -20,7 +20,8 @@ An agent whose limits couldn't be refreshed is shown faded. After the meters,
 
 The right-click menu switches the badge between letters and logos, turns the
 activity pulse on or off, sets the low usage alert and its threshold, sets what prepaid agents show,
-the low balance alert and live OpenRouter checks (shown once one is set up), opens
+the low balance alert and live OpenRouter checks (shown once one is set up),
+turns the Claude extra-usage check on or off, opens
 the Agents panel, and refreshes. Choices are
 saved to the widget's entry in `~/.config/omarchy/shell.json` through
 `omarchy bar set`. You can also toggle the menu from a keybinding or script:
@@ -79,6 +80,24 @@ Spend can come from two places:
   `~/.local/state/omarchy-agent-stats/openrouter-live.json` (numbers only,
   never a key); a failed check keeps it, marked stale.
 
+## Claude extra usage
+
+When a Claude plan limit is used up, an account with extra usage turned on
+keeps working on pay-as-you-go credits. With `claudeExtra` on (off by
+default), the widget shows that month's extra-usage spend: on hover always
+("Extra usage: $27.26 of $60.00 (45%) this month"), and next to Claude's
+meters while a plan limit is at 100%, with "on extra usage until …" in the
+tooltip. Without extra usage, the tooltip says when the agent is blocked
+until instead.
+
+Omarchy doesn't record this, so the widget asks Anthropic itself: the same
+`https://api.anthropic.com/api/oauth/usage` endpoint Claude Code's `/usage` and
+Omarchy's own collector read, at most every five minutes, with the access token
+Claude Code keeps in `$CLAUDE_CONFIG_DIR/.credentials.json` (default
+`~/.claude`). The token is sent only to api.anthropic.com and never refreshed
+or stored; while it has lapsed the check is skipped until Claude Code next runs.
+The numbers are cached in `~/.local/state/omarchy-agent-stats/claude-extra.json`.
+
 ## Requirements
 
 - Omarchy with the built-in Agents plugin (on by default), signed in to at
@@ -111,6 +130,7 @@ Set these on the widget's entry in `~/.config/omarchy/shell.json`, or with
 | `prepaidText` | `Balance` | What a prepaid agent shows: `Balance`, `Today` (spent today) or `Month` (spent this month) |
 | `lowBalanceAt` | `5` | Dollars of balance at or below which a prepaid agent gets the ring; `0` turns it off |
 | `openrouterLive` | `false` | Ask openrouter.ai directly for exact spend and balance (see above) |
+| `claudeExtra` | `false` | Ask Anthropic for Claude's extra-usage spend this month (see above) |
 | `warnAt` | `80` | Percentage at which a meter turns urgent |
 | `refreshIntervalSec` | `60` | How often the local usage files are re-read |
 
