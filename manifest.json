@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.andrewknown.agent-stats",
   "name": "Omarchy Agent Stats",
-  "version": "1.10.1",
+  "version": "1.11.0",
   "author": "andrewKnown",
   "license": "MIT",
   "description": "Per-agent rate-limit meters, prepaid balances (OpenRouter), Claude extra usage, Gemini API usage and today's token total in the bar, built on Omarchy's own Agents usage data. Click an agent to open it in a terminal.",
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Agent Stats",
-    "description": "Two thin meters per subscription (session over weekly), prepaid balances such as OpenRouter's, Claude extra usage, and today's total tokens, with optional low-usage rings. Click an agent to launch it, right click for a menu (providers & keys, show/hide, update frequency, \u2026), middle click to refresh.",
+    "description": "Two thin meters per subscription (session over weekly), prepaid balances such as OpenRouter's, Claude extra usage, and today's total tokens, with optional low-usage rings. Bar modes: Full, Compact (icons), Alerts (near-limit only), Summary (one chip). Click an agent to launch it, right click for a menu, middle click to refresh.",
     "category": "AI",
     "allowMultiple": false,
     "defaultSection": "right",
@@ -22,6 +22,9 @@
       "refreshIntervalSec": 60,
       "warnAt": 80,
       "badgeStyle": "Letters",
+      "barMode": "Full",
+      "sortOrder": "Name",
+      "showTodayTotal": true,
       "activityPulse": false,
       "lowAlert": "Off",
       "lowAlertAt": 10,
@@ -58,6 +61,37 @@
         ],
         "defaultValue": "Off",
         "description": "Best effort. Off follows Omarchy's own schedule (15 minutes by default). Max is the shortest interval each source allows: Claude's limits and extra usage every 5 minutes (Anthropic refuses more often), other agents every minute, OpenRouter every 30 s, Gemini every minute. An interval applies to all of them. Agents are refreshed through Omarchy's own updater (omarchy agent usage-update)."
+      },
+      {
+        "key": "barMode",
+        "type": "enum",
+        "label": "Bar layout",
+        "options": [
+          "Full",
+          "Compact",
+          "Alerts",
+          "Summary"
+        ],
+        "defaultValue": "Full",
+        "description": "Full: badges and meters. Compact: badges only. Alerts: badges only for providers near a limit (or low balance). Summary: one status chip. Open the Usage panel from the menu (or click \u03a3 / the summary chip) for the full list."
+      },
+      {
+        "key": "sortOrder",
+        "type": "enum",
+        "label": "Sort providers",
+        "options": [
+          "Name",
+          "Critical",
+          "Calm"
+        ],
+        "defaultValue": "Name",
+        "description": "Name: A\u2013Z. Critical: least remaining first. Calm: healthiest first. Applies to the bar and the Usage panel."
+      },
+      {
+        "key": "showTodayTotal",
+        "type": "boolean",
+        "label": "Show today's token total (\u03a3) in the bar",
+        "defaultValue": true
       },
       {
         "key": "warnAt",

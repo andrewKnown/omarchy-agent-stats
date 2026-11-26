@@ -8,7 +8,8 @@ import qs.Ui
 // (5-hour) window on top and the longest window below. It only reads the
 // records omarchy-agent-usage-update writes (via read.py). Click an agent to
 // open it in a terminal (launch.sh), right click for this widget's menu
-// (badge style, pulse, low usage alert, Agents panel, refresh), middle click to refresh.
+// (bar layout, sort, badge style, Agents panel, refresh), middle click to refresh.
+// Compact / Alerts / Summary shrink the bar; the Usage panel lists everyone.
 //
 // The root is Omarchy's popup base (Panel) rather than BarWidget so the menu
 // can be a standard bar popup; it carries the same bar/settings API.
@@ -47,6 +48,20 @@ Panel {
   }
   property var busyIds: []
   readonly property bool useLogos: String(setting("badgeStyle", "Letters")) === "Logos"
+  readonly property var barModes: ["Full", "Compact", "Alerts", "Summary"]
+  readonly property string barMode: {
+    var v = String(setting("barMode", "Full"))
+    return barModes.indexOf(v) !== -1 ? v : "Full"
+  }
+  readonly property var sortOrders: ["Name", "Critical", "Calm"]
+  readonly property string sortOrder: {
+    var v = String(setting("sortOrder", "Name"))
+    return sortOrders.indexOf(v) !== -1 ? v : "Name"
+  }
+  readonly property bool showTodayTotal: setting("showTodayTotal", true) !== false
+  // Compact and Alerts only draw badges in the bar; Full keeps meters.
+  readonly property bool iconsOnly: barMode === "Compact" || barMode === "Alerts"
+  readonly property bool summaryMode: barMode === "Summary"
   readonly property bool activityPulse: setting("activityPulse", false) === true
   // Low usage alert: a ring around an agent once any of its limits has this
   // much or less remaining. "Ring" is steady, "Pulse" breathes.
@@ -69,13 +84,95 @@ Panel {
     return !!agent.prepaid && lowBalanceAt > 0 && agent.prepaid.remaining !== null
       && agent.prepaid.remaining !== undefined && Number(agent.prepaid.remaining) <= lowBalanceAt
   }
+  // Near a limit / low balance — drives Alerts mode and Summary, even when
+  // the optional ring style is Off.
+  function nearLimit(agent) {
+    if (balanceLow(agent)) return true
+    if (onExtra(agent) && extraLeftPct(agent.extra) !== null) return extraLow(agent)
+    return limitLow(agent)
+  }
+  // Lower = more urgent (Critical sort). Prepaid-low sorts ahead of everyone.
+  function urgency(agent) {
+    if (balanceLow(agent)) return -1
+    if (onExtra(agent) && extraLeftPct(agent.extra) !== null) return extraLeftPct(agent.extra)
+    if (agent.limits && agent.limits.length > 0) return remaining(agent)
+    return 100
+  }
+  function sortAgents(list) {
+    var copy = list.slice()
+    copy.sort(function(a, b) {
+      if (root.sortOrder === "Critical") {
+        var d = root.urgency(a) - root.urgency(b)
+        return d !== 0 ? d : String(a.name).localeCompare(String(b.name))
+      }
+      if (root.sortOrder === "Calm") {
+        var e = root.urgency(b) - root.urgency(a)
+        return e !== 0 ? e : String(a.name).localeCompare(String(b.name))
+      }
+      return String(a.name).localeCompare(String(b.name))
+    })
+    return copy
+  }
+  readonly property var usageAgents: sortAgents(visibleAgents)
+  readonly property var barAgents: {
+    if (summaryMode) return []
+    var list = visibleAgents
+    if (barMode === "Alerts") list = list.filter(function(a) { return nearLimit(a) })
+    return sortAgents(list)
+  }
+  readonly property int alertCount: {
+    var n = 0
+    for (var i = 0; i < visibleAgents.length; i++) if (nearLimit(visibleAgents[i])) n++
+    return n
+  }
+  readonly property real worstRemaining: {
+    var least = 100
+    var any = false
+    for (var i = 0; i < visibleAgents.length; i++) {
+      if (!nearLimit(visibleAgents[i])) continue
+      any = true
+      var u = urgency(visibleAgents[i])
+      least = Math.min(least, u < 0 ? 0 : u)
+    }
+    return any ? least : 100
+  }
   // On extra usage the plan limit is already spent, so "low" means the extra
   // usage credit left this month, by the same % threshold.
   function isLow(agent) {
     if (lowAlert === "Off") return false
-    if (balanceLow(agent)) return true
-    if (onExtra(agent) && extraLeftPct(agent.extra) !== null) return extraLow(agent)
-    return limitLow(agent)
+    return nearLimit(agent)
+  }
+  // Which popup the KeyboardPanel is showing (menu vs usage list).
+  property string popupKind: "menu"
+  function openPopup(kind) {
+    popupKind = kind
+    if (!opened) open()
+  }
+  function toggleMenu() {
+    if (opened && popupKind === "menu") close()
+    else openPopup("menu")
+  }
+  function toggleUsage() {
+    if (opened && popupKind === "usage") close()
+    else openPopup("usage")
+  }
+  function refreshNow() {
+    Quickshell.execDetached(["omarchy-shell", "omarchy.agents", "refresh"]); root.runRemoteChecks()
+    refreshLater.restart()
+    root.refresh()
+  }
+  function activateAgent(agent) {
+    var launcher = launchers[agent.id]
+    if (!launcher && webPages[agent.id]) Quickshell.execDetached(["xdg-open", webPages[agent.id]])
+    else if (!launcher) openPanel()
+    else launch(agent.id, launcher)
+  }
+  function barPress(button, agent) {
+    if (button === Qt.MiddleButton) refreshNow()
+    else if (button === Qt.RightButton) toggleMenu()
+    else if (agent) activateAgent(agent)
+    else if (barMode === "Full") openPanel()
+    else toggleUsage()
   }
 
   readonly property string prepaidText: {
@@ -501,6 +598,7 @@ Panel {
     lines.push((launchers[a.id] ? "Click: open " + a.name
       : webPages[a.id] ? "Click: " + webPages[a.id].replace(/^https:\/\//, "").split("/")[0] + " usage"
       : "Click: Agents panel") + " · Right: menu · Middle: refresh")
+    if (nearLimit(a)) lines.push("Near limit (" + lowAlertAt + "% / balance threshold)")
     return lines.join("\n")
   }
 
@@ -516,7 +614,19 @@ Panel {
     for (var i = 0; i < todayByAgent.length; i++)
       lines.push("  " + todayByAgent[i].name + ": " + formatTokens(Number(todayByAgent[i].tokens)))
     lines.push("")
-    lines.push("Click: Agents panel · Right: menu · Middle: refresh")
+    lines.push((barMode === "Full" ? "Click: Agents panel" : "Click: usage list")
+      + " · Right: menu · Middle: refresh")
+    return lines.join("\n")
+  }
+
+  function summaryTooltip() {
+    var lines = [alertCount > 0
+      ? (alertCount + " provider" + (alertCount === 1 ? "" : "s") + " near a limit")
+      : "All shown providers look fine"]
+    if (alertCount > 0) lines.push("Tightest remaining: " + worstRemaining.toFixed(0) + "%")
+    lines.push("Layout: " + barMode + " · Sort: " + sortOrder)
+    lines.push("")
+    lines.push("Click: usage list · Right: menu · Middle: refresh")
     return lines.join("\n")
   }
 
@@ -536,7 +646,7 @@ Panel {
     onTriggered: root.refresh()
   }
 
-  visible: visibleAgents.length > 0 || todayTokens > 0
+  visible: visibleAgents.length > 0 || todayTokens > 0 || summaryMode
   implicitWidth: vertical ? barSize : row.implicitWidth + 4
   implicitHeight: vertical ? row.implicitHeight + 4 : barSize
 
@@ -544,11 +654,90 @@ Panel {
     id: row
     anchors.centerIn: parent
     flow: root.vertical ? Grid.TopToBottom : Grid.LeftToRight
-    columns: root.vertical ? 1 : Math.max(1, root.visibleAgents.length + (todayItem.visible ? 1 : 0))
+    columns: root.vertical ? 1 : Math.max(1,
+      root.barAgents.length
+      + (summaryChip.visible ? 1 : 0)
+      + (idleChip.visible ? 1 : 0)
+      + (todayItem.visible ? 1 : 0))
     spacing: 0
 
+    // Summary mode: one status chip for the whole strip.
+    Item {
+      id: summaryChip
+      visible: root.summaryMode
+      implicitWidth: root.vertical ? root.barSize : summaryLabel.implicitWidth + 10
+      implicitHeight: root.vertical ? summaryLabel.implicitHeight + 8 : root.barSize
+
+      Rectangle {
+        anchors.fill: parent
+        anchors.margins: 2
+        radius: Math.min(width, height) / 3
+        visible: root.alertCount > 0
+        color: Qt.rgba(root.hot.r, root.hot.g, root.hot.b, 0.14)
+        border.color: root.hot
+        border.width: 1
+      }
+
+      Text {
+        id: summaryLabel
+        anchors.centerIn: parent
+        textFormat: Text.PlainText
+        text: root.alertCount > 0
+          ? (root.alertCount + "|" + root.worstRemaining.toFixed(0) + "%")
+          : "OK"
+        color: root.alertCount > 0 ? root.hot : root.fg
+        font.family: root.font
+        font.pixelSize: 11
+        font.bold: true
+        scale: summaryHit.pressScale
+      }
+
+      WidgetButton {
+        id: summaryHit
+        anchors.fill: parent
+        bar: root.bar
+        text: ""
+        labelVisible: false
+        hasVisualContent: true
+        tooltipText: (root.tick, root.summaryTooltip())
+        onPressed: function(button) { root.barPress(button, null) }
+      }
+    }
+
+    // Alerts mode with nobody near a limit: a quiet chip so the widget stays findable.
+    Item {
+      id: idleChip
+      visible: root.barMode === "Alerts" && root.barAgents.length === 0 && root.visibleAgents.length > 0
+      implicitWidth: root.vertical ? root.barSize : idleLabel.implicitWidth + 10
+      implicitHeight: root.vertical ? idleLabel.implicitHeight + 8 : root.barSize
+
+      Text {
+        id: idleLabel
+        anchors.centerIn: parent
+        textFormat: Text.PlainText
+        text: "OK"
+        color: root.fg
+        font.family: root.font
+        font.pixelSize: 11
+        font.bold: true
+        opacity: 0.7
+        scale: idleHit.pressScale
+      }
+
+      WidgetButton {
+        id: idleHit
+        anchors.fill: parent
+        bar: root.bar
+        text: ""
+        labelVisible: false
+        hasVisualContent: true
+        tooltipText: (root.tick, root.summaryTooltip())
+        onPressed: function(button) { root.barPress(button, null) }
+      }
+    }
+
     Repeater {
-      model: root.visibleAgents
+      model: root.barAgents
 
       // Each agent is its own bar button, padded so there are no dead gaps
       // between them. WidgetButton registers with the bar, which is the only
@@ -558,7 +747,7 @@ Panel {
         required property var modelData
         readonly property var shortWin: root.shortLimit(modelData.limits)
         readonly property var longWin: root.longLimit(modelData.limits)
-        implicitWidth: root.vertical ? root.barSize : meters.implicitWidth + 10
+        implicitWidth: root.vertical ? root.barSize : meters.implicitWidth + (root.iconsOnly ? 6 : 10)
         implicitHeight: root.vertical ? meters.implicitHeight + 8 : root.barSize
 
         // Low usage ring: a soft tint and outline in the bar's urgent colour.
@@ -642,7 +831,7 @@ Panel {
           Column {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 2
-            visible: agentItem.modelData.limits.length > 0
+            visible: !root.iconsOnly && agentItem.modelData.limits.length > 0
 
             Repeater {
               model: agentItem.modelData.limits.length > 1 ? [agentItem.shortWin, agentItem.longWin]
@@ -671,7 +860,7 @@ Panel {
             // Prepaid agents show their balance; an agent past its plan limit
             // and running on extra usage shows what that has cost this month.
             readonly property bool extraShown: root.showExtra(agentItem.modelData)
-            visible: !!agentItem.modelData.prepaid || extraShown || !!agentItem.modelData.gemini
+            visible: !root.iconsOnly && (!!agentItem.modelData.prepaid || extraShown || !!agentItem.modelData.gemini)
             textFormat: Text.PlainText
             text: agentItem.modelData.prepaid ? root.prepaidLabel(agentItem.modelData.prepaid)
               : extraShown ? root.extraLabel(agentItem.modelData.extra)
@@ -692,21 +881,7 @@ Panel {
           labelVisible: false
           hasVisualContent: true
           tooltipText: (root.tick, root.agentTooltip(agentItem.modelData))
-          onPressed: function(button) {
-            var launcher = root.launchers[agentItem.modelData.id]
-            if (button === Qt.MiddleButton) {
-              Quickshell.execDetached(["omarchy-shell", "omarchy.agents", "refresh"]); root.runRemoteChecks()
-              refreshLater.restart()
-            } else if (button === Qt.RightButton) {
-              root.toggle()
-            } else if (!launcher && root.webPages[agentItem.modelData.id]) {
-              Quickshell.execDetached(["xdg-open", root.webPages[agentItem.modelData.id]])
-            } else if (!launcher) {
-              root.openPanel()
-            } else {
-              root.launch(agentItem.modelData.id, launcher)
-            }
-          }
+          onPressed: function(button) { root.barPress(button, agentItem.modelData) }
         }
       }
     }
@@ -715,7 +890,7 @@ Panel {
     // header line uses.
     Item {
       id: todayItem
-      visible: root.todayTokens > 0
+      visible: root.showTodayTotal && root.todayTokens > 0
       implicitWidth: root.vertical ? root.barSize : todayLabel.implicitWidth + 10
       implicitHeight: root.vertical ? todayLabel.implicitHeight + 8 : root.barSize
 
@@ -739,21 +914,13 @@ Panel {
         labelVisible: false
         hasVisualContent: true
         tooltipText: (root.tick, root.todayTokens, root.todayTooltip())
-        onPressed: function(button) {
-          if (button === Qt.MiddleButton) {
-            Quickshell.execDetached(["omarchy-shell", "omarchy.agents", "refresh"]); root.runRemoteChecks()
-            refreshLater.restart()
-          } else if (button === Qt.RightButton) {
-            root.toggle()
-          } else {
-            root.openPanel()
-          }
-        }
+        onPressed: function(button) { root.barPress(button, null) }
       }
     }
   }
 
-  // Right-click menu, built from the same parts as Omarchy's own bar popups.
+  // Right-click menu / usage list, built from the same parts as Omarchy's own
+  // bar popups. popupKind chooses which column is shown.
   KeyboardPanel {
     id: menu
     anchorItem: root
@@ -761,12 +928,12 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: menu.loadedContent
-    contentWidth: menu.fittedContentWidth(Style.space(240))
-    contentHeight: menu.fittedContentHeight(menu.loadedContentHeight)
+    contentWidth: menu.fittedContentWidth(root.popupKind === "usage" ? Style.space(300) : Style.space(260))
+    contentHeight: menu.fittedContentHeight(menu.loadedContentHeight, root.popupKind === "usage" ? Style.space(420) : Style.space(640))
 
     content: PanelKeyCatcher {
       anchors.fill: parent
-      implicitHeight: menuColumn.implicitHeight
+      implicitHeight: root.popupKind === "usage" ? usageColumn.implicitHeight : menuColumn.implicitHeight
       onCloseRequested: root.close()
 
       Column {
@@ -775,6 +942,29 @@ Panel {
         anchors.right: parent.right
         anchors.top: parent.top
         spacing: Style.space(14)
+        visible: root.popupKind === "menu"
+        width: parent.width
+
+        MenuChoice {
+          title: "Bar layout"
+          options: root.barModes
+          current: root.barMode
+          onChosen: function(value) { root.saveSetting("barMode", value, false) }
+        }
+
+        MenuChoice {
+          title: "Sort"
+          options: root.sortOrders
+          current: root.sortOrder
+          onChosen: function(value) { root.saveSetting("sortOrder", value, false) }
+        }
+
+        MenuChoice {
+          title: "Today total (Σ)"
+          options: ["On", "Off"]
+          current: root.showTodayTotal ? "On" : "Off"
+          onChosen: function(value) { root.saveSetting("showTodayTotal", value === "On", true) }
+        }
 
         MenuChoice {
           title: "Agent badge"
@@ -827,6 +1017,16 @@ Panel {
 
         Button {
           width: parent.width
+          text: "Usage…"
+          fontSize: Style.font.bodySmall
+          foreground: root.fg
+          fontFamily: root.font
+          bordered: true
+          onClicked: root.openPopup("usage")
+        }
+
+        Button {
+          width: parent.width
           text: "Settings & providers…"
           fontSize: Style.font.bodySmall
           foreground: root.fg
@@ -858,10 +1058,197 @@ Panel {
             foreground: root.fg
             fontFamily: root.font
             bordered: true
-            onClicked: {
-              Quickshell.execDetached(["omarchy-shell", "omarchy.agents", "refresh"]); root.runRemoteChecks()
-              refreshLater.restart()
-              root.refresh()
+            onClicked: root.refreshNow()
+          }
+        }
+      }
+
+      // Full connected-provider list with meters; click a row to launch.
+      Flickable {
+        id: usageFlick
+        anchors.fill: parent
+        visible: root.popupKind === "usage"
+        contentWidth: width
+        contentHeight: usageColumn.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        interactive: contentHeight > height
+
+        Column {
+          id: usageColumn
+          width: usageFlick.width
+          spacing: Style.space(10)
+
+          PanelSectionHeader {
+            text: "Usage"
+            foreground: root.fg
+            fontFamily: root.font
+          }
+
+          Row {
+            width: parent.width
+            spacing: Style.space(6)
+            readonly property real cellWidth: (width - spacing) / 2
+
+            Button {
+              width: parent.cellWidth
+              text: "Menu"
+              fontSize: Style.font.bodySmall
+              foreground: root.fg
+              fontFamily: root.font
+              bordered: true
+              onClicked: root.openPopup("menu")
+            }
+
+            Button {
+              width: parent.cellWidth
+              text: "Refresh"
+              fontSize: Style.font.bodySmall
+              foreground: root.fg
+              fontFamily: root.font
+              bordered: true
+              onClicked: root.refreshNow()
+            }
+          }
+
+          Text {
+            width: parent.width
+            visible: root.usageAgents.length === 0
+            textFormat: Text.PlainText
+            text: "No providers to show. Sign in via Settings & providers, or unhide them under Show in bar."
+            wrapMode: Text.WordWrap
+            color: root.fg
+            opacity: 0.7
+            font.family: root.font
+            font.pixelSize: Style.font.bodySmall
+          }
+
+          Repeater {
+            model: root.usageAgents
+
+            Rectangle {
+              id: usageRow
+              required property var modelData
+              width: usageColumn.width
+              height: usageInner.implicitHeight + Style.space(8)
+              radius: Style.space(6)
+              color: usageClick.containsMouse
+                ? Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.08)
+                : (root.nearLimit(modelData) ? Qt.rgba(root.hot.r, root.hot.g, root.hot.b, 0.10) : "transparent")
+              border.color: root.nearLimit(modelData) ? root.hot : "transparent"
+              border.width: root.nearLimit(modelData) ? 1 : 0
+
+              Row {
+                id: usageInner
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Style.space(6)
+                anchors.rightMargin: Style.space(6)
+                spacing: Style.space(8)
+
+                Item {
+                  width: 16
+                  height: 16
+                  anchors.verticalCenter: parent.verticalCenter
+                  readonly property bool showLogo: root.useLogos && usageLogo.status === Image.Ready
+                  Image {
+                    id: usageLogo
+                    anchors.fill: parent
+                    visible: parent.showLogo
+                    source: root.useLogos ? root.logoUrl(usageRow.modelData.id) : ""
+                    fillMode: Image.PreserveAspectFit
+                    asynchronous: true
+                  }
+                  Text {
+                    anchors.centerIn: parent
+                    visible: !parent.showLogo
+                    textFormat: Text.PlainText
+                    text: root.badge(usageRow.modelData)
+                    color: root.fg
+                    font.family: root.font
+                    font.pixelSize: 11
+                    font.bold: true
+                  }
+                }
+
+                Column {
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: 2
+                  width: Math.min(72, usageInner.width * 0.28)
+
+                  Text {
+                    textFormat: Text.PlainText
+                    text: usageRow.modelData.name
+                    elide: Text.ElideRight
+                    width: parent.width
+                    color: root.fg
+                    font.family: root.font
+                    font.pixelSize: Style.font.bodySmall
+                    font.bold: true
+                  }
+
+                  Text {
+                    textFormat: Text.PlainText
+                    text: {
+                      var a = usageRow.modelData
+                      if (a.prepaid) return root.prepaidLabel(a.prepaid)
+                      if (root.showExtra(a)) return root.extraLabel(a.extra)
+                      if (a.gemini) return root.formatTokens(a.gemini.tokens)
+                      if (a.limits.length > 0) return root.remaining(a).toFixed(0) + "% left"
+                      return a.stale ? "stale" : ""
+                    }
+                    color: root.nearLimit(usageRow.modelData) ? root.hot : root.fg
+                    opacity: 0.85
+                    font.family: root.font
+                    font.pixelSize: 10
+                  }
+                }
+
+                Column {
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: 2
+                  visible: usageRow.modelData.limits.length > 0
+
+                  Repeater {
+                    model: {
+                      var limits = usageRow.modelData.limits
+                      if (limits.length > 1) return [root.shortLimit(limits), root.longLimit(limits)]
+                      if (limits.length === 1) return [root.shortLimit(limits)]
+                      return []
+                    }
+
+                    Rectangle {
+                      required property var modelData
+                      width: 64
+                      height: 4
+                      radius: 2
+                      color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.22)
+
+                      Rectangle {
+                        width: Math.max(modelData.percent > 0 ? 2 : 0, parent.width * modelData.percent / 100)
+                        height: parent.height
+                        radius: parent.radius
+                        color: modelData.percent >= root.warnAt ? root.hot : root.fg
+                      }
+                    }
+                  }
+                }
+              }
+
+              MouseArea {
+                id: usageClick
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                cursorShape: Qt.PointingHandCursor
+                onClicked: function(mouse) {
+                  if (mouse.button === Qt.RightButton) root.openPopup("menu")
+                  else if (mouse.button === Qt.MiddleButton) root.refreshNow()
+                  else { root.close(); root.activateAgent(usageRow.modelData) }
+                }
+              }
             }
           }
         }

@@ -11,10 +11,27 @@ weekly window below. A meter turns the bar's urgent color at 80% by default.
 An agent whose limits couldn't be refreshed is shown faded. After the meters,
 `Σ 35.9M` is the total tokens used today across every agent.
 
-| Action | On an agent | On the token total |
+**Bar layout** (right-click menu, or Display & alerts) controls how much space
+the strip uses:
+
+| Layout | Bar shows |
+|---|---|
+| **Full** (default) | Badges, meters, prepaid / extra text |
+| **Compact** | Badges only for every shown provider |
+| **Alerts** | Badges only for providers near a limit (or low balance); `OK` when none are |
+| **Summary** | One chip (`OK`, or `2|8%` for count and tightest remaining) |
+
+**Sort** orders the bar and the Usage panel: **Name**, **Critical** (least
+remaining first), or **Calm** (healthiest first). Near-limit uses the same
+threshold as the low-usage ring (`lowAlertAt` / low balance). **Today total (Σ)**
+can be hidden from the bar. The **Usage…** panel lists every shown provider with
+meters; click a row to launch that agent. In Compact / Alerts / Summary, clicking
+`Σ` or the summary / `OK` chip opens Usage instead of the Agents panel.
+
+| Action | On an agent | On the token total / summary |
 |---|---|---|
-| Hover | Each limit's % and time to reset | Today's tokens per agent |
-| Left click | Open that agent in a terminal | Open the Agents panel |
+| Hover | Each limit's % and time to reset | Today's tokens per agent / alert summary |
+| Left click | Open that agent in a terminal | Full: Agents panel · else: Usage list |
 | Right click | Open the menu | Open the menu |
 | Middle click | Refresh usage now | Refresh usage now |
 
@@ -28,16 +45,17 @@ installed opens its page or else the Agents panel. While Cursor's sign-in is in
 starts with the display hidden from it, so launching it from the bar doesn't
 move the sign-in back into the keyring and blank its usage and Grok Bot's.
 
-The right-click menu holds the everyday choices: **Agent badge** (letters or
-logos), **Update frequency**, **Show in bar** (each provider on or off), then
-**Settings & providers…**, **Agents panel** and **Refresh**.
+The right-click menu holds the everyday choices: **Bar layout**, **Sort**,
+**Today total (Σ)**, **Agent badge** (letters or logos), **Update frequency**,
+**Show in bar** (each provider on or off), then **Usage…**, **Settings &
+providers…**, **Agents panel** and **Refresh**.
 
 **Settings & providers…** opens a setup screen in Omarchy's floating terminal.
-Its **Display & alerts** page covers the rest: the activity pulse, when meters
-turn red, the low usage ring and its threshold, what prepaid providers show and
-their low-balance ring, where OpenRouter's numbers come from, and the Claude
-extra-usage check. Below it are the providers themselves (see "Providers and
-keys").
+Its **Display & alerts** page covers the rest: bar layout and sort, the activity
+pulse, when meters turn red, the low usage ring and its threshold (also used by
+Alerts / Summary), what prepaid providers show and their low-balance ring, where
+OpenRouter's numbers come from, and the Claude extra-usage check. Below it are
+the providers themselves (see "Providers and keys").
 
 Choices are saved to the widget's entry in `~/.config/omarchy/shell.json` through
 `omarchy bar set`. You can also toggle the menu from a keybinding or script:

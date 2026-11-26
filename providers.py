@@ -82,10 +82,22 @@ def save_widget_setting(key, value, as_json=False):
 # The widget's display and alert settings, each with the choices offered here
 # as (label, value). Anything else can still be set in shell.json.
 DISPLAY = [
+    ("barMode", "Bar layout", [
+        ("Full (badges + meters)", "Full"),
+        ("Compact (badges only)", "Compact"),
+        ("Alerts (near-limit badges)", "Alerts"),
+        ("Summary (one chip)", "Summary"),
+    ]),
+    ("sortOrder", "Sort providers", [
+        ("Name A–Z", "Name"),
+        ("Critical first", "Critical"),
+        ("Calm first", "Calm"),
+    ]),
+    ("showTodayTotal", "Show today's token total (Σ) in the bar", [("Off", False), ("On", True)]),
     ("activityPulse", "Pulse while an agent is working", [("Off", False), ("On", True)]),
     ("warnAt", "Turn a meter red at % used", [("70%", 70), ("80%", 80), ("90%", 90), ("95%", 95)]),
     ("lowAlert", "Low usage ring", [("Off", "Off"), ("Ring", "Ring"), ("Pulsing ring", "Pulse")]),
-    ("lowAlertAt", "Ring when % left is at or below", [("5%", 5), ("10%", 10), ("20%", 20), ("30%", 30)]),
+    ("lowAlertAt", "Near-limit / ring when % left is at or below", [("5%", 5), ("10%", 10), ("20%", 20), ("30%", 30)]),
     ("prepaidText", "Prepaid providers show", [("Balance", "Balance"), ("Spent today", "Today"), ("Spent this month", "Month")]),
     ("lowBalanceAt", "Ring when a balance drops to", [("Off", 0), ("$1", 1), ("$5", 5), ("$10", 10), ("$20", 20)]),
     ("openrouterLive", "OpenRouter numbers", [("Local estimates (no network)", False), ("Live from the OpenRouter API", True)]),
