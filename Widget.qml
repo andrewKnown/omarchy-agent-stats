@@ -590,9 +590,9 @@ Panel {
     for (var j = 0; j < a.limits.length; j++) {
       var l = a.limits[j]
       var reset = untilText(l.resetsAt)
-      lines.push(l.label + ": " + l.percent.toFixed(0) + "%" + (reset ? "  · resets in " + reset : ""))
+      lines.push(l.label + ": " + formatPercent(l.percent) + "%" + (reset ? "  · resets in " + reset : ""))
     }
-    if (lowAlert !== "Off" && limitLow(a)) lines.push("Low: " + remaining(a).toFixed(0) + "% left (alert at " + lowAlertAt + "%)")
+    if (lowAlert !== "Off" && limitLow(a)) lines.push("Low: " + formatPercent(remaining(a)) + "% left (alert at " + lowAlertAt + "%)")
     if (lowAlert !== "Off" && balanceLow(a)) lines.push("Low balance (alert at " + money(lowBalanceAt, p.currency) + ")")
     lines.push("")
     lines.push((launchers[a.id] ? "Click: open " + a.name
@@ -609,6 +609,14 @@ Panel {
     return String(Math.round(n))
   }
 
+  // Under 1%: one decimal so Cursor-like 0.4% does not round to a fake "0%".
+  function formatPercent(n) {
+    var p = Number(n)
+    if (isNaN(p) || p <= 0) return "0"
+    if (p < 1) return p.toFixed(1)
+    return String(Math.round(p))
+  }
+
   function todayTooltip() {
     var lines = ["Tokens today: " + Number(todayTokens).toLocaleString(Qt.locale(), "f", 0)]
     for (var i = 0; i < todayByAgent.length; i++)
@@ -623,7 +631,7 @@ Panel {
     var lines = [alertCount > 0
       ? (alertCount + " provider" + (alertCount === 1 ? "" : "s") + " near a limit")
       : "All shown providers look fine"]
-    if (alertCount > 0) lines.push("Tightest remaining: " + worstRemaining.toFixed(0) + "%")
+    if (alertCount > 0) lines.push("Tightest remaining: " + formatPercent(worstRemaining) + "%")
     lines.push("Layout: " + barMode + " · Sort: " + sortOrder)
     lines.push("")
     lines.push("Click: usage list · Right: menu · Middle: refresh")
@@ -683,7 +691,7 @@ Panel {
         anchors.centerIn: parent
         textFormat: Text.PlainText
         text: root.alertCount > 0
-          ? (root.alertCount + "|" + root.worstRemaining.toFixed(0) + "%")
+          ? (root.alertCount + "|" + root.formatPercent(root.worstRemaining) + "%")
           : "OK"
         color: root.alertCount > 0 ? root.hot : root.fg
         font.family: root.font
@@ -1196,7 +1204,7 @@ Panel {
                       if (a.prepaid) return root.prepaidLabel(a.prepaid)
                       if (root.showExtra(a)) return root.extraLabel(a.extra)
                       if (a.gemini) return root.formatTokens(a.gemini.tokens)
-                      if (a.limits.length > 0) return root.remaining(a).toFixed(0) + "% left"
+                      if (a.limits.length > 0) return root.formatPercent(root.remaining(a)) + "% left"
                       return a.stale ? "stale" : ""
                     }
                     color: root.nearLimit(usageRow.modelData) ? root.hot : root.fg

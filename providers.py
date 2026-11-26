@@ -230,6 +230,19 @@ def money(value):
         return "?"
 
 
+def format_percent(used_0_to_1):
+    """Omarchy stores limit fractions 0..1; under 1% keep a decimal so 0.4% is not 0%."""
+    try:
+        pct = max(0.0, min(100.0, float(used_0_to_1) * 100))
+    except (TypeError, ValueError):
+        return "?"
+    if pct <= 0:
+        return "0%"
+    if pct < 1:
+        return "%.1f%%" % pct
+    return "%d%%" % round(pct)
+
+
 def status(rec):
     """One short line describing what Omarchy currently reports."""
     if not rec:
@@ -240,7 +253,7 @@ def status(rec):
         shown = []
         for item in limits[:3]:
             try:
-                shown.append("%s %d%%" % (str(item.get("label", ""))[:22], round(float(item.get("percent")) * 100)))
+                shown.append("%s %s" % (str(item.get("label", ""))[:22], format_percent(item.get("percent"))))
             except (TypeError, ValueError, AttributeError):
                 pass
         parts.append(", ".join(shown))
