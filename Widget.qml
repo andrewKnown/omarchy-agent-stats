@@ -311,10 +311,13 @@ Panel {
     property bool enabled: false
     property int ageSec: 300
     property var args: []
-    function run() { if (enabled && !proc.running) proc.running = true }
+    function run(force) {
+      if (!enabled || proc.running) return
+      proc.command = ["python3", "-I", root.remoteScript].concat(check.args).concat(force === true ? ["--force"] : [])
+      proc.running = true
+    }
     Process {
       id: proc
-      command: ["python3", "-I", root.remoteScript].concat(check.args)
       // 75: put off to keep clear of Omarchy's own Claude check; retry soon.
       onExited: function(code) { if (code === 75) retrySoon.restart(); else root.refresh() }
     }
@@ -352,7 +355,8 @@ Panel {
     ageSec: root.geminiAgeSec
     args: ["gemini", "--gemini-projects=" + root.geminiProjects, "--gemini-age=" + root.geminiAgeSec]
   }
-  function runRemoteChecks() { openrouterCheck.run(); claudeCheck.run(); geminiCheck.run() }
+  // A refresh someone asked for (middle click, Refresh) skips the freshness wait.
+  function runRemoteChecks() { openrouterCheck.run(true); claudeCheck.run(true); geminiCheck.run(true) }
 
   readonly property int readMs: maxFrequency ? 30000 : intervalMs
   Process {

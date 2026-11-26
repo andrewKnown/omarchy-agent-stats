@@ -160,7 +160,7 @@ def openrouter_live(cache_path):
         fetched = float(cached.get("fetchedAt") or 0)
     except (TypeError, ValueError):
         fetched = 0
-    if cached.get("ok") and time.time() - fetched < still_fresh(age_arg("openrouter-age", OPENROUTER_MIN_AGE, 30)):
+    if cached.get("ok") and not FORCED and time.time() - fetched < still_fresh(age_arg("openrouter-age", OPENROUTER_MIN_AGE, 30)):
         return cached
     result, errors = {}, []
     # With a management key, spend is the whole account's: every key summed.
@@ -227,6 +227,12 @@ def openrouter_live(cache_path):
     result.update(ok=True, stale=bool(errors), error="; ".join(errors)[:80], fetchedAt=time.time())
     save_spend(cache_path, result)
     return result
+
+
+# --force (a refresh someone asked for): skip the "answer is still fresh" wait.
+# Claude still honours Anthropic's retry-after and stays clear of Omarchy's
+# own check, so a click can't add to its rate limit.
+FORCED = "--force" in sys.argv[2:]
 
 
 def still_fresh(age):
@@ -350,7 +356,7 @@ def gemini_usage(projects, cache_path):
         fetched = 0
     today = datetime.now().astimezone().date().isoformat()
     same = cached.get("projects") == projects and cached.get("day") == today
-    if same and cached.get("ok") and time.time() - fetched < still_fresh(age_arg("gemini-age", GEMINI_MIN_AGE, 60)):
+    if same and cached.get("ok") and not FORCED and time.time() - fetched < still_fresh(age_arg("gemini-age", GEMINI_MIN_AGE, 60)):
         return cached
     token, error = gcloud_token()
     if token:
@@ -459,7 +465,7 @@ def claude_extra(cache_path):
         fetched = float(cached.get("fetchedAt") or 0)
     except (TypeError, ValueError):
         fetched = 0
-    if cached.get("ok") and time.time() - fetched < still_fresh(age_arg("claude-age", CLAUDE_MIN_AGE, CLAUDE_MIN_AGE)):
+    if cached.get("ok") and not FORCED and time.time() - fetched < still_fresh(age_arg("claude-age", CLAUDE_MIN_AGE, CLAUDE_MIN_AGE)):
         return cached
     # After a 429, wait as long as Anthropic asked before trying again.
     try:

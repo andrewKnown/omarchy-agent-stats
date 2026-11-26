@@ -61,6 +61,31 @@ class ClaudeExtra(unittest.TestCase):
             self.assertEqual(opener.call_count, 1)  # second answer came from the cache
             self.assertEqual(second["used"], 27.26)
 
+    def test_forced_refresh_skips_the_fresh_wait(self):
+        with Sandbox() as box:
+            self.sign_in()
+            r = remote()
+            r.FORCED = True
+            cache = os.path.join(box.plugin_state, "claude-extra.json")
+            r.save_spend(cache, {"ok": True, "used": 1, "fetchedAt": time.time() - 30})
+            body = io.BytesIO(json.dumps(self.PAYLOAD).encode())
+            with mock.patch.object(r.urllib.request, "urlopen", return_value=mock.MagicMock(
+                    __enter__=lambda s: body, __exit__=lambda *a: False)) as opener:
+                result = r.claude_extra(cache)
+            self.assertEqual(opener.call_count, 1)
+            self.assertEqual(result["used"], 27.26)
+
+    def test_forced_refresh_still_honours_retry_after(self):
+        with Sandbox() as box:
+            self.sign_in()
+            r = remote()
+            r.FORCED = True
+            cache = os.path.join(box.plugin_state, "claude-extra.json")
+            r.save_spend(cache, {"ok": True, "used": 1, "fetchedAt": time.time() - 30, "retryAt": time.time() + 300})
+            with mock.patch.object(r.urllib.request, "urlopen") as opener:
+                r.claude_extra(cache)
+            opener.assert_not_called()
+
     def test_429_waits_before_asking_again(self):
         with Sandbox() as box:
             self.sign_in()

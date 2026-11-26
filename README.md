@@ -151,7 +151,9 @@ Why those floors:
 Agents are refreshed with Omarchy's own `omarchy agent usage-update` for just
 the agents shown: a full refresh (limits and today's tokens), since the
 `--limits-only` kind reuses the token scan for up to 15 minutes. Middle-click
-forces a full refresh at any time.
+forces a full refresh at any time, the network checks included (Claude's
+extra usage still waits out any "too many requests" and stays a minute clear of
+Omarchy's own Claude check).
 
 ## Prepaid balances (OpenRouter)
 
