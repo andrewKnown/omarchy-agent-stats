@@ -477,6 +477,53 @@ def manage_gemini():
             pause()
 
 
+def cursor_storage():
+    """Where the Cursor CLI keeps its sign-in: "file", "keyring" or "none"."""
+    data = read_json(os.path.join(CONFIG, "cursor", "auth.json"))
+    if data.get("accessToken"):
+        return "file"
+    return "keyring" if data.get("storedIn") else "none"
+
+
+def manage_cursor(agent_id, name):
+    """Cursor and Grok Bot share the Cursor CLI sign-in."""
+    while True:
+        clear()
+        heading(name)
+        if agent_id == "grokbot":
+            say("Grok Bot is Cursor's separate Grok allowance: it uses your Cursor sign-in.")
+        where = cursor_storage()
+        if where == "file":
+            say("Cursor sign-in: in ~/.config/cursor/auth.json, which Omarchy reads.")
+            say("Clicking Cursor in the bar starts it so the sign-in stays there.")
+        elif where == "keyring":
+            say("Cursor sign-in: in your desktop keyring. Omarchy 4.5 can't read it yet")
+            say("(omacom/omarchy#19559), so Cursor and Grok Bot show no usage. Signing in")
+            say("again with the display hidden saves it to the file Omarchy reads; once")
+            say("Omarchy reads the keyring, a normal `cursor-agent login` is enough.")
+        else:
+            say("Cursor: not signed in.")
+        options = ["Sign in so Omarchy can read it", "Test", "Back"]
+        if shutil.which("cursor-agent") is None:
+            say("\nThe Cursor CLI (cursor-agent) isn't installed.")
+            options = ["Test", "Back"]
+        picked = choose(f"{name}: {status(record(agent_id))}", options)
+        if picked in (None, "Back"):
+            return
+        if picked == "Test":
+            test(agent_id)
+        else:
+            say("\nOpen the link it prints in your browser and approve; Ctrl-C cancels.\n")
+            env = {k: v for k, v in os.environ.items() if k not in ("WAYLAND_DISPLAY", "DISPLAY")}
+            env["NO_OPEN_BROWSER"] = "1"
+            subprocess.run(["cursor-agent", "login"], env=env)
+            say("Sign-in now: " + {"file": "in the file Omarchy reads.", "keyring": "still in the keyring.",
+                                   "none": "not signed in."}[cursor_storage()])
+            test("cursor")
+            test("grokbot")
+        pause()
+
+
 def manage_other(agent_id, name):
     rec = record(agent_id)
     clear()
@@ -515,6 +562,8 @@ def main():
         _, _, agent_id, name, _ = labels[picked]
         if agent_id == "display":
             manage_display()
+        elif agent_id in ("cursor", "grokbot"):
+            manage_cursor(agent_id, name)
         elif agent_id == "gemini-api":
             manage_gemini()
         elif agent_id in KEYED:

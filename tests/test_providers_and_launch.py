@@ -32,6 +32,21 @@ class Keys(unittest.TestCase):
         self.assertTrue(p.valid_key("sk-or-v1-abcdefgh"))
 
 
+class CursorSignIn(unittest.TestCase):
+    def test_where_the_sign_in_is(self):
+        with Sandbox() as box:
+            p = load("providers")
+            path = os.path.join(box.config, "cursor", "auth.json")
+            self.assertEqual(p.cursor_storage(), "none")
+            os.makedirs(os.path.dirname(path))
+            with open(path, "w") as fh:
+                json.dump({"storedIn": "os-secret-store"}, fh)
+            self.assertEqual(p.cursor_storage(), "keyring")
+            with open(path, "w") as fh:
+                json.dump({"accessToken": "x"}, fh)
+            self.assertEqual(p.cursor_storage(), "file")
+
+
 class DisplaySettings(unittest.TestCase):
     def test_every_choice_matches_the_manifest(self):
         p = load("providers")

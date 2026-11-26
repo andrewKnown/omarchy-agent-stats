@@ -80,6 +80,9 @@ currently reports, and for each one:
   is shown as such.
 - **Claude, Codex, Grok**: sign in or add an account through Omarchy's own
   `omarchy agent account add`, or list accounts.
+- **Cursor and Grok Bot**: shows where the Cursor sign-in is stored and, while
+  it's in the keyring Omarchy can't read yet, signs in again so it's saved to
+  the file Omarchy reads.
 - **Everyone else**: Omarchy reads the provider's own app or CLI sign-in; the
   screen shows Omarchy's hint for it.
 - **Test** re-collects that provider with Omarchy's updater and shows the result.
