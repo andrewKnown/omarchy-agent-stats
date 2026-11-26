@@ -54,6 +54,15 @@ Omarchy's built-in **Agents** plugin (`omarchy.agents`) keeps in
 (`read.py`). By default it makes no network requests and only reads local
 files (plus `/proc` when the activity pulse is on).
 
+The optional network checks (live OpenRouter, Claude extra usage, Gemini API)
+live in `remote.py`. Each runs in the background on its own timer and leaves its
+result, or its error, in a cache file under `~/.local/state/omarchy-agent-stats/`;
+`read.py` only ever reads those, so a slow or stuck check never holds up the
+bar. A result older than three checks shows as stale. The Claude check never
+runs more often than every 5 minutes, since it shares Anthropic's rate limit
+with Omarchy's own Claude checks, and waits as long as Anthropic asks after a
+"too many requests" answer.
+
 ## Providers and keys
 
 The widget shows every provider Omarchy's Agents plugin tracks that has limits
@@ -112,7 +121,7 @@ numbers, best effort:
 | Choice | Subscription limits | Claude extra usage | OpenRouter (live) |
 |---|---|---|---|
 | `Off` (default) | Omarchy's schedule | every 5 min | every minute |
-| `Max` | Claude every 3 min, other agents every minute | every 3 min | every minute |
+| `Max` | Claude every 3 min, other agents every minute | every 5 min | every minute |
 | `3m`, `5m`, `10m`, `15m` | that interval | that interval | that interval |
 
 `Max` is the shortest interval each provider allows. Anthropic refuses usage

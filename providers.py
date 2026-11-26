@@ -52,9 +52,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def reader():
-    """read.py from this plugin, for its Google Cloud helpers."""
+    """remote.py from this plugin, for its Google Cloud helpers."""
     import importlib.util
-    spec = importlib.util.spec_from_file_location("agent_stats_read", os.path.join(HERE, "read.py"))
+    spec = importlib.util.spec_from_file_location("agent_stats_remote", os.path.join(HERE, "remote.py"))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

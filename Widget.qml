@@ -280,12 +280,57 @@ Panel {
   readonly property var providerFloorMin: ({ claude: 3 })
   property var lastNudge: ({})
   readonly property int openrouterAgeSec: nudgeMin > 0 && !maxFrequency ? nudgeMin * 60 : 55
-  readonly property int claudeAgeSec: maxFrequency ? 180 : nudgeMin > 0 ? nudgeMin * 60 : 300
+  // Never under 5 minutes: shares Anthropic's rate limit with Omarchy's checks.
+  readonly property int claudeAgeSec: Math.max(300, nudgeMin > 0 && !maxFrequency ? nudgeMin * 60 : 300)
   readonly property int geminiAgeSec: maxFrequency ? 60 : nudgeMin > 0 ? nudgeMin * 60 : 300
   // Google Cloud projects whose Gemini API usage to show (set from the
   // Providers screen); empty = no Gemini check.
   readonly property string geminiProjects: String(setting("geminiProjects", "") || "").split(",")
     .map(function(x) { return x.trim() }).filter(function(x) { return /^[a-z][a-z0-9-]{5,29}$/.test(x) }).join(",")
+  // The network checks (remote.py) each run in the background on their own
+  // timer and leave a cache file; read.py only reads those, so a slow or stuck
+  // check never holds up the bar. A finished check re-reads at once.
+  readonly property string remoteScript: Qt.resolvedUrl("remote.py").toString().replace("file://", "")
+  component RemoteCheck: Item {
+    id: check
+    property bool enabled: false
+    property int ageSec: 300
+    property var args: []
+    function run() { if (enabled && !proc.running) proc.running = true }
+    Process {
+      id: proc
+      command: ["python3", "-I", root.remoteScript].concat(check.args)
+      onExited: root.refresh()
+    }
+    // A little past the age, so the check is due when it fires.
+    Timer {
+      interval: (check.ageSec + 10) * 1000
+      repeat: true
+      running: check.enabled
+      triggeredOnStart: true
+      onTriggered: check.run()
+    }
+  }
+  RemoteCheck {
+    id: openrouterCheck
+    enabled: root.openrouterLive
+    ageSec: root.openrouterAgeSec
+    args: ["openrouter", "--openrouter-age=" + root.openrouterAgeSec]
+  }
+  RemoteCheck {
+    id: claudeCheck
+    enabled: root.claudeExtra
+    ageSec: root.claudeAgeSec
+    args: ["claude", "--claude-age=" + root.claudeAgeSec]
+  }
+  RemoteCheck {
+    id: geminiCheck
+    enabled: root.geminiProjects !== ""
+    ageSec: root.geminiAgeSec
+    args: ["gemini", "--gemini-projects=" + root.geminiProjects, "--gemini-age=" + root.geminiAgeSec]
+  }
+  function runRemoteChecks() { openrouterCheck.run(); claudeCheck.run(); geminiCheck.run() }
+
   readonly property int readMs: maxFrequency ? 30000 : intervalMs
   Process {
     id: nudger
@@ -610,7 +655,7 @@ Panel {
           onPressed: function(button) {
             var launcher = root.launchers[agentItem.modelData.id]
             if (button === Qt.MiddleButton) {
-              Quickshell.execDetached(["omarchy-shell", "omarchy.agents", "refresh"])
+              Quickshell.execDetached(["omarchy-shell", "omarchy.agents", "refresh"]); root.runRemoteChecks()
               refreshLater.restart()
             } else if (button === Qt.RightButton) {
               root.toggle()
@@ -656,7 +701,7 @@ Panel {
         tooltipText: (root.tick, root.todayTokens, root.todayTooltip())
         onPressed: function(button) {
           if (button === Qt.MiddleButton) {
-            Quickshell.execDetached(["omarchy-shell", "omarchy.agents", "refresh"])
+            Quickshell.execDetached(["omarchy-shell", "omarchy.agents", "refresh"]); root.runRemoteChecks()
             refreshLater.restart()
           } else if (button === Qt.RightButton) {
             root.toggle()
@@ -836,7 +881,7 @@ Panel {
             fontFamily: root.font
             bordered: true
             onClicked: {
-              Quickshell.execDetached(["omarchy-shell", "omarchy.agents", "refresh"])
+              Quickshell.execDetached(["omarchy-shell", "omarchy.agents", "refresh"]); root.runRemoteChecks()
               refreshLater.restart()
               root.refresh()
             }
