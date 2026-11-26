@@ -55,6 +55,11 @@ def say(text=""):
     print(text, flush=True)
 
 
+def clear():
+    if sys.stdout.isatty():
+        print("\033[H\033[2J", end="", flush=True)
+
+
 def heading(text):
     if HAS_GUM:
         subprocess.run(["gum", "style", "--bold", "--margin", "1 0 0 0", text])
@@ -221,6 +226,7 @@ def test(agent_id):
 def manage_keys(agent_id, name):
     fields = KEYED[agent_id]
     while True:
+        clear()
         heading(f"{name} keys")
         for field, label, env in fields:
             say(f"  {label}: {key_source(agent_id, field, env)}")
@@ -259,6 +265,8 @@ def manage_keys(agent_id, name):
 
 def manage_account(agent_id, name):
     while True:
+        clear()
+        heading(name)
         picked = choose(f"{name}: {status(record(agent_id))}",
                         ["Sign in / add an account", "List accounts", "Test", "Back"])
         if picked in (None, "Back"):
@@ -276,6 +284,7 @@ def manage_account(agent_id, name):
 
 def manage_other(agent_id, name):
     rec = record(agent_id)
+    clear()
     heading(name)
     say("Omarchy reads this provider from its own app or CLI's sign-in.")
     if rec.get("authHelpText"):
@@ -298,6 +307,7 @@ def main():
             ready = bool(rec.get("limits") or rec.get("balance"))
             rows.append((not ready, name.lower(), agent_id, name, status(rec)))
         rows.sort()
+        clear()
         labels = {f"{'●' if not r[0] else '○'} {r[3]:<20} {r[4]}"[:110]: r for r in rows}
         heading("Agent Stats providers  (● shown in the bar  ○ nothing to show yet)")
         picked = choose("Pick a provider to set up (Esc to quit)", list(labels) + ["Quit"])
